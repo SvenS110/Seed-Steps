@@ -25,10 +25,9 @@ seed-steps-python/
 │ ├── bip39.py
 │ ├── cli.py
 │ ├── entropy.py
-│ └── format.py
-│
-├── data/
-│ └── english.txt
+│ ├── format.py
+│ └── data/
+│    └── english.txt
 │
 ├── tests/
 │ └── test_bip39.py
@@ -61,7 +60,7 @@ Funcionalidad Fase 1:
 
 5. Cargar la wordlist BIP39 inglesa desde:
 
-   data/english.txt
+   seed_steps/data/english.txt
 
 6. Verificar que la wordlist tenga exactamente 2048 palabras.
 
@@ -149,7 +148,7 @@ Contenido mínimo esperado:
 5. seed_steps/cli.py
    - argparse
    - argumento --entropy
-   - carga data/english.txt
+   - carga seed_steps/data/english.txt
    - llama a build_bip39_breakdown
    - imprime salida educativa clara
 
@@ -168,7 +167,7 @@ Contenido mínimo esperado:
 
 Importante:
 
-- Si falta data/english.txt, crea el archivo vacío con una nota en README indicando que debe copiarse ahí la wordlist oficial BIP39 inglesa de 2048 palabras antes de ejecutar.
+- Si falta seed_steps/data/english.txt, falla con error operativo claro. No crear wordlists vacías.
 - No inventes una wordlist parcial.
 - No implementes todavía seed BIP39 con PBKDF2.
 - No implementes todavía BIP32.

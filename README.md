@@ -25,19 +25,25 @@ python -m pip install -e ".[dev]"
 Generar entropia de 128 bits automaticamente:
 
 ```bash
-python -m seed_steps.cli
+seed-steps
 ```
 
 Usar entropia fija:
 
 ```bash
-python -m seed_steps.cli --entropy 00000000000000000000000000000000
+seed-steps --entropy 00000000000000000000000000000000
 ```
 
 Modo compacto (sin tabla detallada por palabra):
 
 ```bash
-python -m seed_steps.cli --entropy 00000000000000000000000000000000 --compact
+seed-steps --entropy 00000000000000000000000000000000 --compact
+```
+
+Ejecucion como modulo (equivalente):
+
+```bash
+python -m seed_steps --entropy 00000000000000000000000000000000
 ```
 
 ### Salida educativa (modo detallado por defecto)
@@ -58,9 +64,19 @@ Cada seccion incluye una linea de "Por que" para contexto pedagogico, metricas c
 pytest
 ```
 
+## Contrato de errores CLI
+
+- Los errores se imprimen en `stderr` con plantilla uniforme:
+  `ERROR <TIPO>: <causa>. Accion sugerida: <guia>.`
+- Codigos de salida:
+  - `0`: ejecucion exitosa
+  - `2`: error de entrada (`--entropy`)
+  - `3`: error operativo o de configuracion (wordlist)
+  - `4`: error de dominio BIP39
+
 ## Nota sobre wordlist
 
-La wordlist BIP39 inglesa debe estar en `data/english.txt` y contener exactamente 2048 palabras.
+La wordlist BIP39 inglesa se carga desde `seed_steps/data/english.txt` (empaquetada con el proyecto) y debe contener exactamente 2048 palabras.
 
 ## Advertencia de seguridad
 

@@ -32,7 +32,7 @@ class Bip39Breakdown:
 
 def load_wordlist(path: Path) -> list[str]:
     if not path.exists():
-        raise FileNotFoundError(f"Wordlist file not found: {path}")
+        raise FileNotFoundError(f"No se encontro el archivo de wordlist: {path}")
 
     words = [
         line.strip()
@@ -40,13 +40,15 @@ def load_wordlist(path: Path) -> list[str]:
         if line.strip()
     ]
     if len(words) != 2048:
-        raise ValueError(f"BIP39 wordlist must contain 2048 words, got {len(words)}")
+        raise ValueError(
+            f"La wordlist BIP39 debe contener 2048 palabras; se encontraron {len(words)}"
+        )
     return words
 
 
 def build_bip39_breakdown(entropy: bytes, wordlist: list[str]) -> Bip39Breakdown:
     if len(wordlist) != 2048:
-        raise ValueError("Wordlist must contain exactly 2048 words")
+        raise ValueError("La wordlist debe contener exactamente 2048 palabras")
 
     entropy_hex = bytes_to_hex(entropy)
     entropy_bits = bytes_to_binary(entropy)
@@ -60,7 +62,7 @@ def build_bip39_breakdown(entropy: bytes, wordlist: list[str]) -> Bip39Breakdown
     entropy_plus_checksum_bits = entropy_bits + checksum_bits
     bit_blocks = split_every(entropy_plus_checksum_bits, 11)
     if any(len(block) != 11 for block in bit_blocks):
-        raise ValueError("All mnemonic blocks must be 11 bits long")
+        raise ValueError("Todos los bloques mnemotecnicos deben tener 11 bits")
 
     steps: list[Bip39WordStep] = []
     for position, block in enumerate(bit_blocks, start=1):

@@ -11,8 +11,8 @@ VALID_ENTROPY_BYTE_LENGTHS = {16, 20, 24, 28, 32}
 def generate_entropy(byte_length: int = 16) -> bytes:
     if byte_length not in VALID_ENTROPY_BYTE_LENGTHS:
         raise ValueError(
-            f"Invalid entropy length: {byte_length} bytes. "
-            f"Valid lengths: {sorted(VALID_ENTROPY_BYTE_LENGTHS)}"
+            f"Longitud de entropy invalida: {byte_length} bytes. "
+            f"Longitudes permitidas: {sorted(VALID_ENTROPY_BYTE_LENGTHS)}"
         )
     return secrets.token_bytes(byte_length)
 
@@ -42,7 +42,7 @@ def parse_entropy_hex(entropy_hex: str) -> bytes:
     try:
         entropy = bytes.fromhex(normalized)
     except ValueError as exc:
-        raise ValueError("Entropy must be valid hexadecimal") from exc
+        raise ValueError("Entropy hexadecimal invalida") from exc
 
     if len(entropy) not in VALID_ENTROPY_BYTE_LENGTHS:
         valid_bits = sorted(length * 8 for length in VALID_ENTROPY_BYTE_LENGTHS)

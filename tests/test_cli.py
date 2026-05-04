@@ -61,7 +61,8 @@ def test_cli_fails_when_entropy_is_not_hex(capsys, monkeypatch) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == 2
-    assert "Error de entrada (--entropy):" in captured.err
+    assert "ERROR ENTRADA:" in captured.err
+    assert "Accion sugerida:" in captured.err
     assert "hexadecimal invalida" in captured.err
 
 
@@ -72,7 +73,8 @@ def test_cli_fails_when_entropy_length_is_invalid(capsys, monkeypatch) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == 2
-    assert "Error de entrada (--entropy):" in captured.err
+    assert "ERROR ENTRADA:" in captured.err
+    assert "Accion sugerida:" in captured.err
     assert "Longitud de entropy invalida" in captured.err
 
 
@@ -84,7 +86,7 @@ def test_cli_fails_when_wordlist_file_is_missing(capsys, monkeypatch) -> None:
     )
 
     def fake_load_wordlist(_: Path) -> list[str]:
-        raise FileNotFoundError("Wordlist file not found: data/english.txt")
+        raise FileNotFoundError("Wordlist file not found: seed_steps/data/english.txt")
 
     monkeypatch.setattr("seed_steps.cli.load_wordlist", fake_load_wordlist)
 
@@ -92,8 +94,9 @@ def test_cli_fails_when_wordlist_file_is_missing(capsys, monkeypatch) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == 3
-    assert "Error operativo (wordlist):" in captured.err
-    assert "Wordlist file not found" in captured.err
+    assert "ERROR OPERATIVO:" in captured.err
+    assert "wordlist BIP39" in captured.err
+    assert "Accion sugerida:" in captured.err
 
 
 def test_cli_fails_with_domain_validation_error(capsys, monkeypatch) -> None:
@@ -104,7 +107,7 @@ def test_cli_fails_with_domain_validation_error(capsys, monkeypatch) -> None:
     )
 
     def fake_build_breakdown(*_args, **_kwargs):
-        raise ValueError("Wordlist must contain exactly 2048 words")
+        raise ValueError("La wordlist debe contener exactamente 2048 palabras")
 
     monkeypatch.setattr("seed_steps.cli.build_bip39_breakdown", fake_build_breakdown)
 
@@ -112,5 +115,6 @@ def test_cli_fails_with_domain_validation_error(capsys, monkeypatch) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == 4
-    assert "Error de validacion BIP39:" in captured.err
-    assert "2048 words" in captured.err
+    assert "ERROR DOMINIO BIP39:" in captured.err
+    assert "2048 palabras" in captured.err
+    assert "Accion sugerida:" in captured.err

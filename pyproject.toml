@@ -9,6 +9,9 @@ description = "Educational CLI to explain BIP39 mnemonic generation"
 readme = "README.md"
 requires-python = ">=3.11"
 
+[project.scripts]
+seed-steps = "seed_steps.cli:run"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
@@ -20,3 +23,6 @@ pythonpath = ["."]
 
 [tool.setuptools.packages.find]
 include = ["seed_steps*"]
+
+[tool.setuptools.package-data]
+seed_steps = ["data/*.txt"]

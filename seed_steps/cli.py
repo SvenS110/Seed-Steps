@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+from importlib.resources import as_file, files
 from pathlib import Path
 
 from seed_steps.bip39 import build_bip39_breakdown, load_wordlist
 from seed_steps.entropy import generate_entropy, parse_entropy_hex
 from seed_steps.format import group_binary
+
+
+def _error_message(error_type: str, cause: str, guide: str) -> str:
+    return f"ERROR {error_type}: {cause}. Accion sugerida: {guide}."
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -98,22 +103,53 @@ def run() -> int:
             parse_entropy_hex(args.entropy) if args.entropy else generate_entropy(16)
         )
     except ValueError as exc:
-        print(f"Error de entrada (--entropy): {exc}", file=sys.stderr)
+        print(
+            _error_message(
+                "ENTRADA",
+                f"valor invalido en --entropy ({exc})",
+                "usa un hexadecimal valido de 128/160/192/224/256 bits",
+            ),
+            file=sys.stderr,
+        )
         return 2
 
+    wordlist_path = files("seed_steps").joinpath("data/english.txt")
+
     try:
-        wordlist = load_wordlist(Path("data/english.txt"))
+        with as_file(wordlist_path) as resolved_path:
+            wordlist = load_wordlist(resolved_path)
     except FileNotFoundError as exc:
-        print(f"Error operativo (wordlist): {exc}", file=sys.stderr)
+        print(
+            _error_message(
+                "OPERATIVO",
+                f"no se encontro la wordlist BIP39 ({exc})",
+                "verifica que exista seed_steps/data/english.txt en la instalacion",
+            ),
+            file=sys.stderr,
+        )
         return 3
     except ValueError as exc:
-        print(f"Error de configuracion de wordlist: {exc}", file=sys.stderr)
+        print(
+            _error_message(
+                "CONFIGURACION",
+                f"wordlist BIP39 invalida ({exc})",
+                "asegura 2048 palabras no vacias en english.txt",
+            ),
+            file=sys.stderr,
+        )
         return 3
 
     try:
         breakdown = build_bip39_breakdown(entropy, wordlist)
     except ValueError as exc:
-        print(f"Error de validacion BIP39: {exc}", file=sys.stderr)
+        print(
+            _error_message(
+                "DOMINIO BIP39",
+                f"validacion de reglas BIP39 fallida ({exc})",
+                "revisa la entropia y la integridad de la wordlist",
+            ),
+            file=sys.stderr,
+        )
         return 4
 
     _print_header()
