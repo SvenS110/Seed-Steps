@@ -1,0 +1,10 @@
+Seed Steps - BIP39 Educational Breakdown
+============================================
+1. Resumen
+   Por que: Vista rapida para validar valores clave de BIP39.
+   Entropia (hex):      00000000000000000000000000000000
+   Bits entropia:       128
+   Bits checksum:       4
+   Bits totales:        132
+   Numero de palabras:  12
+   Mnemonic:            abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about

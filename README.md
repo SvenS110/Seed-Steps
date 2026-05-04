@@ -64,6 +64,12 @@ Cada seccion incluye una linea de "Por que" para contexto pedagogico, metricas c
 pytest
 ```
 
+Actualizar snapshots/golden de salida CLI (solo cuando el cambio de copy/estructura sea INTENCIONAL):
+
+```bash
+UPDATE_GOLDENS=1 pytest tests/test_cli.py
+```
+
 ## Contrato de errores CLI
 
 - Los errores se imprimen en `stderr` con plantilla uniforme:

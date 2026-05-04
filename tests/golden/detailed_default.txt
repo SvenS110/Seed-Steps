@@ -1,0 +1,43 @@
+Seed Steps - BIP39 Educational Breakdown
+============================================
+1. Entropia
+   Por que: Es la fuente de aleatoriedad que determina toda la semilla.
+   Entropia (hex):      00000000000000000000000000000000
+   Entropia (bits):     00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+   Tamano de entropia:  128 bits
+
+2. Checksum
+   Por que: Detecta errores al escribir o transcribir la mnemotecnica.
+   SHA256(entropia):    374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb
+   Bits de checksum:    0011
+   Tamano checksum:     4 bits
+
+3. Bits combinados
+   Por que: BIP39 une entropia y checksum antes de partir en bloques de 11.
+   Entropia+checksum:   000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011
+   Total de bits:       132 bits
+
+4. Indices
+   Por que: Cada bloque de 11 bits apunta a una palabra en la lista BIP39.
+   Bloques de 11 bits:  00000000000 | 00000000000 | 00000000000 | 00000000000 | 00000000000 | 00000000000 | 00000000000 | 00000000000 | 00000000000 | 00000000000 | 00000000000 | 00000000011
+   Numero de palabras:  12
+
+5. Mnemotecnica
+   Por que: Es la representacion humana de la semilla binaria.
+   Tabla por palabra:
+   pos | bloque(11-bit) | indice | palabra
+   ----+----------------+--------+----------
+     1 | 00000000000 |      0 | abandon
+     2 | 00000000000 |      0 | abandon
+     3 | 00000000000 |      0 | abandon
+     4 | 00000000000 |      0 | abandon
+     5 | 00000000000 |      0 | abandon
+     6 | 00000000000 |      0 | abandon
+     7 | 00000000000 |      0 | abandon
+     8 | 00000000000 |      0 | abandon
+     9 | 00000000000 |      0 | abandon
+    10 | 00000000000 |      0 | abandon
+    11 | 00000000000 |      0 | abandon
+    12 | 00000000011 |      3 | about
+
+Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
