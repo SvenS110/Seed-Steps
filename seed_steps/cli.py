@@ -10,6 +10,9 @@ from pathlib import Path
 
 from seed_steps.bip32 import (
     HARDENED_OFFSET,
+    MAINNET_XPRV_VERSION,
+    MAINNET_XPUB_VERSION,
+    compressed_pubkey_from_private_key,
     derive_p2wpkh_address_from_node,
     derive_bip32_master_node,
     derive_bip32_node_from_master,
@@ -46,6 +49,43 @@ def _print_secrets_warning() -> None:
         "ADVERTENCIA DE SEGURIDAD: --show-secrets expone material sensible en terminal, logs e historial."
     )
     print("NO uses semillas o claves reales en este modo.")
+
+
+COLOR_RESET = "\033[0m"
+COLOR_ENTROPY = "\033[96m"
+COLOR_CHECKSUM = "\033[93m"
+COLOR_WORD = "\033[38;5;208m"
+COLOR_PASSPHRASE = "\033[95m"
+COLOR_SEED = "\033[32m"
+COLOR_IL = "\033[94m"
+COLOR_IR = "\033[35m"
+COLOR_XPRV = "\033[91m"
+COLOR_XPUB = "\033[36m"
+COLOR_FINAL_ADDRESS = "\033[92m"
+
+
+def _colorize(value: str, color: str, *, enable: bool = True) -> str:
+    if not enable:
+        return value
+    return f"{color}{value}{COLOR_RESET}"
+
+
+def _colorized_11_bit_block(block: str, start_bit: int, entropy_bits_len: int) -> str:
+    end_bit = start_bit + len(block)
+    entropy_part_len = max(0, min(entropy_bits_len, end_bit) - start_bit)
+    checksum_part_len = len(block) - entropy_part_len
+    entropy_part = block[:entropy_part_len]
+    checksum_part = block[entropy_part_len : entropy_part_len + checksum_part_len]
+    return (
+        f"{_colorize(entropy_part, COLOR_ENTROPY)}"
+        f"{_colorize(checksum_part, COLOR_CHECKSUM)}"
+    )
+
+
+def _prompt_micro_step(label: str, *, enable: bool) -> None:
+    if not enable:
+        return
+    input(f"\nENTER -> {label}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -202,6 +242,40 @@ def _print_stage_mnemonic(breakdown) -> None:
     print(f"\nMnemonic: {breakdown.mnemonic}")
 
 
+def _print_stage_indices_colored(breakdown) -> None:
+    print("4. Indices")
+    print("   Por que: Cada bloque de 11 bits apunta a una palabra en la lista BIP39.")
+    print("   Leyenda color:       ENTROPIA=cian | CHECKSUM=amarillo")
+    colored_blocks: list[str] = []
+    for index, block in enumerate(breakdown.bit_blocks):
+        colored_blocks.append(
+            _colorized_11_bit_block(block, index * 11, len(breakdown.entropy_bits))
+        )
+    print(f"   Bloques de 11 bits:  {' | '.join(colored_blocks)}")
+    print(f"   Numero de palabras:  {len(breakdown.steps)}")
+
+
+def _print_stage_mnemonic_colored(breakdown) -> None:
+    print("5. Mnemotecnica")
+    print("   Por que: Es la representacion humana de la semilla binaria.")
+    print("   Leyenda color:       BLOQUE hereda origen bits | PALABRA=naranja")
+    print("   Tabla por palabra:")
+    print("   pos | bloque(11-bit) | indice | palabra")
+    print("   ----+----------------+--------+----------")
+    for index, step in enumerate(breakdown.steps):
+        colored_block = _colorized_11_bit_block(
+            step.bit_block, index * 11, len(breakdown.entropy_bits)
+        )
+        colored_word = _colorize(step.word, COLOR_WORD)
+        print(
+            f"   {step.position:>3} | {colored_block} | {step.index:>6} | {colored_word}"
+        )
+    colored_mnemonic = " ".join(
+        _colorize(word, COLOR_WORD) for word in breakdown.mnemonic.split()
+    )
+    print(f"\nMnemonic: {colored_mnemonic}")
+
+
 def _prompt_continue() -> None:
     input("\nPresiona Enter para continuar... ")
 
@@ -329,12 +403,12 @@ def _prompt_passphrase() -> str:
 
 def _prompt_network() -> str:
     while True:
-        network = input("\nRed objetivo [mainnet/testnet]: ").strip().lower()
+        network = input("\nRed objetivo [M] mainnet / [T] testnet: ").strip().lower()
         if network in {"mainnet", "m"}:
             return "mainnet"
         if network in {"testnet", "t"}:
             return "testnet"
-        print("Entrada invalida. Escribe mainnet o testnet.")
+        print("Entrada invalida. Escribe M/T o mainnet/testnet.")
 
 
 def _prompt_hd_path(network: str) -> str:
@@ -411,9 +485,9 @@ def _run_bip39_guided_substeps(
         elif index == 2:
             _print_stage_combined_bits(breakdown, use_color=True)
         elif index == 3:
-            _print_stage_indices(breakdown)
+            _print_stage_indices_colored(breakdown)
         else:
-            _print_stage_mnemonic(breakdown)
+            _print_stage_mnemonic_colored(breakdown)
 
         action = _prompt_continue_with_options()
         if action == "cancel":
@@ -426,66 +500,137 @@ def _run_bip39_guided_substeps(
 
 
 def _print_phase_seed_bip39(
-    *, mnemonic: str, passphrase: str, show_secrets: bool
+    *,
+    mnemonic: str,
+    passphrase: str,
+    show_secrets: bool,
+    interactive_micro_steps: bool = False,
 ) -> dict[str, object]:
-    seed_bytes = derive_bip39_seed(mnemonic, passphrase)
+    _prompt_micro_step("normalizar y fijar Mnemonic", enable=interactive_micro_steps)
+    mnemonic_value = _colorize(mnemonic, COLOR_WORD)
+    print(f"\n   [micro] Mnemonic normalizada: {mnemonic_value}")
+
+    passphrase_display = _display_sensitive(
+        passphrase or "(vacia)", show_secrets=show_secrets
+    )
+    _prompt_micro_step(
+        "normalizar passphrase y construir salt", enable=interactive_micro_steps
+    )
     salt = build_bip39_seed_salt(passphrase)
+    print(
+        "   [micro] Salt = "
+        f"'mnemonic' + {_colorize(passphrase_display, COLOR_PASSPHRASE)} => {_colorize(salt, COLOR_PASSPHRASE)}"
+    )
+
+    _prompt_micro_step(
+        "ejecutar PBKDF2-HMAC-SHA512 (2048)", enable=interactive_micro_steps
+    )
+    seed_bytes = derive_bip39_seed(mnemonic, passphrase)
     print("\nFase B) Seed BIP39")
     print(
         "   Lectura docente: tomamos tu frase y la pasamos por una maquina de estiramiento criptografico."
     )
     print("   Que entra:")
-    print(f"   - Mnemonic:           {mnemonic}")
-    print(
-        f"   - Passphrase:         {_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets)}"
-    )
+    print(f"   - Mnemonic:           {mnemonic_value}")
+    print(f"   - Passphrase:         {_colorize(passphrase_display, COLOR_PASSPHRASE)}")
     print("   Que operacion se hace:")
     print(
-        "   - Formula mental: seed = PBKDF2(mnemonic, salt='mnemonic'+passphrase, 2048)"
+        "   - Formula mental: "
+        f"{_colorize('seed', COLOR_SEED)} = PBKDF2("
+        f"{_colorize('mnemonic', COLOR_WORD)}, salt='mnemonic'+{_colorize('passphrase', COLOR_PASSPHRASE)}, 2048)"
     )
     print("   - Motor real: PBKDF2-HMAC-SHA512, iteraciones=2048")
-    print(f"   - Salt:               {salt}")
+    print(f"   - Salt:               {_colorize(salt, COLOR_PASSPHRASE)}")
     print("   Que sale:")
     print(
-        f"   - Seed (hex, 64 bytes): {_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)}"
+        f"   - Seed (hex, 64 bytes): {_colorize(_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED)}"
     )
     return {"seed_bytes": seed_bytes, "salt": salt}
 
 
 def _print_phase_master_bip32(
-    seed_bytes: bytes, *, show_secrets: bool
+    seed_bytes: bytes, *, show_secrets: bool, interactive_micro_steps: bool = False
 ) -> dict[str, object]:
+    _prompt_micro_step(
+        "preparar entrada seed para HMAC", enable=interactive_micro_steps
+    )
+    seed_hex = _display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)
+    print(f"\n   [micro] Seed entrada: {_colorize(seed_hex, COLOR_SEED)}")
+    _prompt_micro_step(
+        "ejecutar HMAC-SHA512 con clave 'Bitcoin seed'", enable=interactive_micro_steps
+    )
     master = derive_bip32_master_node(seed_bytes)
+    hmac_hex = _display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)
+    il_hex = _display_sensitive(
+        master.master_private_key.hex(), show_secrets=show_secrets
+    )
+    ir_hex = _display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)
+    i_colored = _colorize(il_hex, COLOR_IL) + _colorize(ir_hex, COLOR_IR)
+
+    _prompt_micro_step(
+        "serializar xprv (version+depth+fp+child+cc+key)",
+        enable=interactive_micro_steps,
+    )
+    xprv_key_data = "00" + master.master_private_key.hex()
+    xprv_payload = (
+        MAINNET_XPRV_VERSION.hex()
+        + "00"
+        + "00000000"
+        + "00000000"
+        + master.chain_code.hex()
+        + xprv_key_data
+    )
+    _prompt_micro_step(
+        "serializar xpub (version+depth+fp+child+cc+pubkey)",
+        enable=interactive_micro_steps,
+    )
+    pubkey_compressed = compressed_pubkey_from_private_key(
+        master.master_private_key
+    ).hex()
+    xpub_payload = (
+        MAINNET_XPUB_VERSION.hex()
+        + "00"
+        + "00000000"
+        + "00000000"
+        + master.chain_code.hex()
+        + pubkey_compressed
+    )
+
     print("\nFase C) Master BIP32")
     print(
         "   Lectura docente: desde la seed nacen dos piezas: secreto maestro y cadena de derivacion."
     )
     print("   Que entra:")
-    print(
-        f"   - Seed:               {_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)}"
-    )
+    print(f"   - Seed:               {_colorize(seed_hex, COLOR_SEED)}")
     print("   Que operacion se hace:")
-    print("   - HMAC-SHA512('Bitcoin seed', seed)")
+    print(f"   - Clave HMAC:         {_colorize('Bitcoin seed', COLOR_IR)}")
+    print(f"   - Entrada HMAC:       {_colorize(seed_hex, COLOR_SEED)}")
+    print("   - Operacion:          HMAC-SHA512(clave, entrada)")
     print("   Que sale:")
+    print(f"   - I:                  {i_colored}  | IL(izq, azul) + IR(der, morado)")
     print(
-        f"   - I:                  {_display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)}  | Resultado bruto de 64 bytes"
+        f"   - IL (master key):    {_colorize(il_hex, COLOR_IL)}  | Mitad izquierda: clave privada raiz"
     )
     print(
-        f"   - IL (master key):    {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}  | Mitad izquierda: clave privada raiz"
+        f"   - IR (chain code):    {_colorize(ir_hex, COLOR_IR)}  | Mitad derecha: cadena que guia derivaciones"
+    )
+    print(f"   - Payload xprv:       {_colorize(xprv_payload, COLOR_XPRV)}")
+    print(f"   - Payload xpub:       {_colorize(xpub_payload, COLOR_XPUB)}")
+    print(
+        f"   - xprv:               {_colorize(_display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV)}  | Empaquetado del nodo privado maestro"
     )
     print(
-        f"   - IR (chain code):    {_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)}  | Mitad derecha: cadena que guia derivaciones"
+        f"   - xpub:               {_colorize(master.xpub, COLOR_XPUB)}  | Version publica para derivar/consultar sin firmar"
     )
     print(
-        f"   - xprv:               {_display_sensitive(master.xprv, show_secrets=show_secrets)}  | Empaquetado del nodo privado maestro"
-    )
-    print(
-        f"   - xpub:               {master.xpub}  | Version publica para derivar/consultar sin firmar"
+        "   Explicacion simple: xprv firma y deriva; xpub solo deriva/consulta direcciones."
     )
     return {"master": master}
 
 
-def _print_phase_hd_path(master, path: str, *, show_secrets: bool) -> dict[str, object]:
+def _print_phase_hd_path(
+    master, path: str, *, show_secrets: bool, interactive_micro_steps: bool = False
+) -> dict[str, object]:
     parsed = parse_bip32_path(path)
     current = derive_bip32_node_from_master(master)
     print("\nFase D) Ruta HD")
@@ -514,6 +659,9 @@ def _print_phase_hd_path(master, path: str, *, show_secrets: bool) -> dict[str, 
     if not parsed:
         print("   - m (sin derivacion) | Se mantiene el nodo maestro en depth=0")
     for step in parsed:
+        _prompt_micro_step(
+            f"derivar nivel {step.token}", enable=interactive_micro_steps
+        )
         current = derive_bip32_path_from_node(current, f"m/{step.token}")
         index_label = (
             step.child_number - HARDENED_OFFSET if step.hardened else step.child_number
@@ -525,32 +673,45 @@ def _print_phase_hd_path(master, path: str, *, show_secrets: bool) -> dict[str, 
     print("   Que sale:")
     print(f"   - Nodo depth final:   {current.depth}")
     print(
-        f"   - xprv derivado:      {_display_sensitive(current.xprv, show_secrets=show_secrets)}"
+        f"   - xprv derivado:      {_colorize(_display_sensitive(current.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
     )
-    print(f"   - xpub derivado:      {current.xpub}")
+    print(f"   - xpub derivado:      {_colorize(current.xpub, COLOR_XPUB)}")
     return {"derived": current}
 
 
 def _print_phase_address(
-    derived, network: str, *, show_secrets: bool
+    derived, network: str, *, show_secrets: bool, interactive_micro_steps: bool = False
 ) -> dict[str, object]:
+    _prompt_micro_step(
+        "obtener pubkey comprimida desde nodo derivado", enable=interactive_micro_steps
+    )
     p2wpkh = derive_p2wpkh_address_from_node(derived, network)
     print("\nFase E) Direccion")
+    print(
+        "   Contexto: la pubkey comprimida sale del nodo derivado (clave privada hija)."
+    )
     print("   Que entra:")
     print(
-        f"   - Pubkey comprimida:  {_display_sensitive(p2wpkh.compressed_pubkey.hex(), show_secrets=show_secrets)}"
+        f"   - Pubkey comprimida:  {_colorize(_display_sensitive(p2wpkh.compressed_pubkey.hex(), show_secrets=show_secrets), COLOR_XPUB)}"
     )
     print(f"   - Red:                {network}")
+    _prompt_micro_step("aplicar HASH160(pubkey)", enable=interactive_micro_steps)
+    hash160_hex = _display_sensitive(p2wpkh.hash160.hex(), show_secrets=show_secrets)
+    _prompt_micro_step(
+        "formar witness program SegWit v0", enable=interactive_micro_steps
+    )
+    witness_line = f"OP_{p2wpkh.witness_version} {p2wpkh.witness_program.hex()}"
+    _prompt_micro_step("codificar Bech32(hrp, witness)", enable=interactive_micro_steps)
     print("   Que operacion se hace:")
-    print("   - Flujo completo: pubkey -> HASH160 -> witness program -> Bech32")
+    print(
+        "   - Flujo completo: "
+        f"contexto priv/pub -> {_colorize('pubkey comprimida', COLOR_XPUB)}"
+        f" -> {_colorize('HASH160', COLOR_IR)} -> witness program -> Bech32"
+    )
     print("   Que sale:")
-    print(
-        f"   - HASH160:            {_display_sensitive(p2wpkh.hash160.hex(), show_secrets=show_secrets)}"
-    )
-    print(
-        f"   - Witness:            OP_{p2wpkh.witness_version} {p2wpkh.witness_program.hex()}"
-    )
-    print(f"   - Direccion final:    {p2wpkh.address}")
+    print(f"   - HASH160:            {_colorize(hash160_hex, COLOR_IR)}")
+    print(f"   - Witness:            {_colorize(witness_line, COLOR_CHECKSUM)}")
+    print(f"   - Direccion final:    {_colorize(p2wpkh.address, COLOR_FINAL_ADDRESS)}")
     return {"final_addr": p2wpkh}
 
 
@@ -568,19 +729,36 @@ def _print_phase_final_summary(
 ) -> None:
     print("\nFase F) Resumen final")
     print("   Inputs usados:")
-    print(f"   - Mnemonic:           {mnemonic}")
+    colored_mnemonic = " ".join(
+        _colorize(word, COLOR_WORD) for word in mnemonic.split()
+    )
+    print(f"   - Mnemonic:           {colored_mnemonic}")
     print(
-        f"   - Passphrase:         {_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets)}"
+        f"   - Passphrase:         {_colorize(_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets), COLOR_PASSPHRASE)}"
     )
     print(f"   - Ruta:               {path}")
     print(f"   - Red:                {network}")
     print("   Outputs clave:")
     print(
-        f"   - Seed:               {_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)}"
+        f"   - Seed:               {_colorize(_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED)}"
     )
-    print(f"   - xpub master:        {master.xpub}")
-    print(f"   - xpub derivado:      {derived.xpub}")
-    print(f"   - Direccion final:    {final_addr.address}")
+    print(
+        f"   - IL master:          {_colorize(_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets), COLOR_IL)}"
+    )
+    print(
+        f"   - IR master:          {_colorize(_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets), COLOR_IR)}"
+    )
+    print(
+        f"   - xprv master:        {_colorize(_display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
+    )
+    print(f"   - xpub master:        {_colorize(master.xpub, COLOR_XPUB)}")
+    print(
+        f"   - xprv derivado:      {_colorize(_display_sensitive(derived.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
+    )
+    print(f"   - xpub derivado:      {_colorize(derived.xpub, COLOR_XPUB)}")
+    print(
+        f"   - Direccion final:    {_colorize(final_addr.address, COLOR_FINAL_ADDRESS)}"
+    )
     print("   ADVERTENCIA: EDUCATIVO, NO CUSTODIA REAL")
 
 
@@ -749,13 +927,14 @@ def _run_interactive(wordlist: list[str]) -> int:
                 mnemonic=str(state["mnemonic"]),
                 passphrase=passphrase,
                 show_secrets=True,
+                interactive_micro_steps=True,
             )
             state.update(seed_artifacts)
             print("\nEtapa 2/5 completada: seed BIP39 derivada")
 
         elif stage_index == 2:
             master_artifacts = _print_phase_master_bip32(
-                state["seed_bytes"], show_secrets=True
+                state["seed_bytes"], show_secrets=True, interactive_micro_steps=True
             )
             state.update(master_artifacts)
             print("\nEtapa 3/5 completada: master BIP32 derivada")
@@ -769,6 +948,7 @@ def _run_interactive(wordlist: list[str]) -> int:
                 state["master"],
                 path,
                 show_secrets=True,
+                interactive_micro_steps=True,
             )
             state.update(path_artifacts)
             print("\nEtapa 4/5 completada: ruta HD derivada")
@@ -778,6 +958,7 @@ def _run_interactive(wordlist: list[str]) -> int:
                 state["derived"],
                 str(state["network"]),
                 show_secrets=True,
+                interactive_micro_steps=True,
             )
             state.update(address_artifacts)
             _print_phase_final_summary(
