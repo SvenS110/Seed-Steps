@@ -191,6 +191,7 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
     inputs = iter(
         [
             "a",
+            "128",
             "s",
             "s",
             "s",
@@ -275,7 +276,7 @@ def test_cli_interactive_guided_continue_no_can_cancel_flow(
 ) -> None:
     monkeypatch.setattr(sys, "argv", ["seed-steps", "--interactive"])
 
-    inputs = iter(["a", "n", "c"])
+    inputs = iter(["a", "128", "n", "c"])
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
 
     exit_code = run()

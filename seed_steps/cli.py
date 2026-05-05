@@ -157,15 +157,28 @@ def _print_stage_entropy(breakdown) -> None:
 def _print_stage_checksum(breakdown) -> None:
     print("2. Checksum")
     print("   Por que: Detecta errores al escribir o transcribir la mnemotecnica.")
+    print("   Regla BIP39: checksum = primeros ENT/32 bits de SHA-256(entropia).")
     print(f"   SHA256(entropia):    {breakdown.sha256_hex}")
     print(f"   Bits de checksum:    {breakdown.checksum_bits}")
     print(f"   Tamano checksum:     {len(breakdown.checksum_bits)} bits")
 
 
-def _print_stage_combined_bits(breakdown) -> None:
+def _print_stage_combined_bits(breakdown, *, use_color: bool = False) -> None:
+    color_cyan = "\033[96m"
+    color_yellow = "\033[93m"
+    color_reset = "\033[0m"
+    colored_bits = breakdown.entropy_plus_checksum_bits
+    if use_color:
+        colored_bits = (
+            f"{color_cyan}{breakdown.entropy_bits}{color_reset}"
+            f"{color_yellow}{breakdown.checksum_bits}{color_reset}"
+        )
+
     print("3. Bits combinados")
     print("   Por que: BIP39 une entropia y checksum antes de partir en bloques de 11.")
-    print(f"   Entropia+checksum:   {breakdown.entropy_plus_checksum_bits}")
+    if use_color:
+        print("   Leyenda color:       ENTROPIA=cian | CHECKSUM=amarillo")
+    print(f"   Entropia+checksum:   {colored_bits}")
     print(f"   Total de bits:       {len(breakdown.entropy_plus_checksum_bits)} bits")
 
 
@@ -202,7 +215,8 @@ def _prompt_entropy_choice() -> bytes:
         )
 
         if choice in {"a", "auto", "automatica", "automatic"}:
-            return generate_entropy(16)
+            bits = _prompt_entropy_bits_choice()
+            return generate_entropy(bits // 8)
 
         if choice in {"m", "manual"}:
             while True:
@@ -215,6 +229,17 @@ def _prompt_entropy_choice() -> bytes:
                     print(f"Entrada invalida: {exc}. Intenta nuevamente.")
 
         print("Opcion invalida. Escribe A para automatica o M para manual.")
+
+
+def _prompt_entropy_bits_choice() -> int:
+    valid_bits = {"128", "160", "192", "224", "256"}
+    while True:
+        bits = input(
+            "Cuantos bits de entropia automatica deseas? [128/160/192/224/256]: "
+        ).strip()
+        if bits in valid_bits:
+            return int(bits)
+        print("Entrada invalida. Elige exactamente: 128, 160, 192, 224 o 256.")
 
 
 def _prompt_yes_no(prompt: str) -> bool:
@@ -242,7 +267,9 @@ def _prompt_continue_with_options() -> str:
         print("Opcion invalida. Escribe C para cancelar o E para editar.")
 
 
-def _prompt_source_choice(wordlist: list[str]) -> tuple[bytes | None, str, str]:
+def _prompt_source_choice(
+    wordlist: list[str],
+) -> tuple[bytes | None, str, str, int | None]:
     while True:
         choice = (
             input(
@@ -253,9 +280,10 @@ def _prompt_source_choice(wordlist: list[str]) -> tuple[bytes | None, str, str]:
         )
 
         if choice in {"a", "auto", "automatica", "automatic"}:
-            entropy = generate_entropy(16)
+            bits = _prompt_entropy_bits_choice()
+            entropy = generate_entropy(bits // 8)
             breakdown = build_bip39_breakdown(entropy, wordlist)
-            return entropy, breakdown.mnemonic, "entropia automatica"
+            return entropy, breakdown.mnemonic, "entropia automatica", bits
 
         if choice in {"e", "entropia", "entropia manual", "manual"}:
             while True:
@@ -265,7 +293,12 @@ def _prompt_source_choice(wordlist: list[str]) -> tuple[bytes | None, str, str]:
                 try:
                     entropy = parse_entropy_hex(entropy_hex)
                     breakdown = build_bip39_breakdown(entropy, wordlist)
-                    return entropy, breakdown.mnemonic, "entropia manual"
+                    return (
+                        entropy,
+                        breakdown.mnemonic,
+                        "entropia manual",
+                        len(entropy) * 8,
+                    )
                 except ValueError as exc:
                     print(f"Entrada invalida: {exc}. Intenta nuevamente.")
 
@@ -285,7 +318,7 @@ def _prompt_source_choice(wordlist: list[str]) -> tuple[bytes | None, str, str]:
                         f"Ejemplo invalido: {invalid_words[0]}."
                     )
                     continue
-                return None, " ".join(words), "mnemotecnica manual"
+                return None, " ".join(words), "mnemotecnica manual", None
 
         print("Opcion invalida. Escribe A, E o M.")
 
@@ -342,25 +375,45 @@ def _prompt_show_secrets() -> bool:
     return True
 
 
-def _run_bip39_guided_substeps(breakdown) -> str:
+def _run_bip39_guided_substeps(
+    breakdown, *, source_label: str, selected_entropy_bits: int | None
+) -> str:
     """Render BIP39 didactic substeps with S/N confirmation.
 
     Returns: continue | retry | cancel
     """
 
     substeps = [
-        ("Subpaso BIP39 1/5: Entropia", _print_stage_entropy),
-        ("Subpaso BIP39 2/5: Checksum", _print_stage_checksum),
-        ("Subpaso BIP39 3/5: Bits combinados", _print_stage_combined_bits),
-        ("Subpaso BIP39 4/5: Indices (bloques de 11 bits)", _print_stage_indices),
-        ("Subpaso BIP39 5/5: Mnemotecnica", _print_stage_mnemonic),
+        "Subpaso BIP39 1/5: Entropia",
+        "Subpaso BIP39 2/5: Checksum",
+        "Subpaso BIP39 3/5: Bits combinados",
+        "Subpaso BIP39 4/5: Indices (bloques de 11 bits)",
+        "Subpaso BIP39 5/5: Mnemotecnica",
     ]
 
     index = 0
     while index < len(substeps):
-        title, printer = substeps[index]
+        title = substeps[index]
         print(f"\n{title}")
-        printer(breakdown)
+        if index == 0:
+            _print_stage_entropy(breakdown)
+            entropy_bits = selected_entropy_bits or len(breakdown.entropy_bits)
+            print(
+                f"   Fuente usada:        {source_label} (wizard) | tamano elegido: {entropy_bits} bits"
+            )
+        elif index == 1:
+            _print_stage_checksum(breakdown)
+            ent_bits = len(breakdown.entropy_bits)
+            checksum_bits = ent_bits // 32
+            print(
+                f"   Calculo docente:     ENT={ent_bits} => ENT/32={checksum_bits} bits desde SHA-256(entropia)"
+            )
+        elif index == 2:
+            _print_stage_combined_bits(breakdown, use_color=True)
+        elif index == 3:
+            _print_stage_indices(breakdown)
+        else:
+            _print_stage_mnemonic(breakdown)
 
         action = _prompt_continue_with_options()
         if action == "cancel":
@@ -378,13 +431,19 @@ def _print_phase_seed_bip39(
     seed_bytes = derive_bip39_seed(mnemonic, passphrase)
     salt = build_bip39_seed_salt(passphrase)
     print("\nFase B) Seed BIP39")
+    print(
+        "   Lectura docente: tomamos tu frase y la pasamos por una maquina de estiramiento criptografico."
+    )
     print("   Que entra:")
     print(f"   - Mnemonic:           {mnemonic}")
     print(
         f"   - Passphrase:         {_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets)}"
     )
     print("   Que operacion se hace:")
-    print("   - PBKDF2-HMAC-SHA512, iteraciones=2048")
+    print(
+        "   - Formula mental: seed = PBKDF2(mnemonic, salt='mnemonic'+passphrase, 2048)"
+    )
+    print("   - Motor real: PBKDF2-HMAC-SHA512, iteraciones=2048")
     print(f"   - Salt:               {salt}")
     print("   Que sale:")
     print(
@@ -398,6 +457,9 @@ def _print_phase_master_bip32(
 ) -> dict[str, object]:
     master = derive_bip32_master_node(seed_bytes)
     print("\nFase C) Master BIP32")
+    print(
+        "   Lectura docente: desde la seed nacen dos piezas: secreto maestro y cadena de derivacion."
+    )
     print("   Que entra:")
     print(
         f"   - Seed:               {_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)}"
@@ -406,19 +468,19 @@ def _print_phase_master_bip32(
     print("   - HMAC-SHA512('Bitcoin seed', seed)")
     print("   Que sale:")
     print(
-        f"   - I:                  {_display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)}  | Salida completa de 64 bytes del HMAC; base de todo el master node"
+        f"   - I:                  {_display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)}  | Resultado bruto de 64 bytes"
     )
     print(
-        f"   - IL (master key):    {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}  | Mitad izquierda (32 bytes): secreto maestro usado para firmar"
+        f"   - IL (master key):    {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}  | Mitad izquierda: clave privada raiz"
     )
     print(
-        f"   - IR (chain code):    {_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)}  | Mitad derecha (32 bytes): entropy de derivacion para hijos"
+        f"   - IR (chain code):    {_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)}  | Mitad derecha: cadena que guia derivaciones"
     )
     print(
-        f"   - xprv:               {_display_sensitive(master.xprv, show_secrets=show_secrets)}  | Serializacion extendida del nodo privado maestro"
+        f"   - xprv:               {_display_sensitive(master.xprv, show_secrets=show_secrets)}  | Empaquetado del nodo privado maestro"
     )
     print(
-        f"   - xpub:               {master.xpub}  | Serializacion extendida del nodo publico maestro"
+        f"   - xpub:               {master.xpub}  | Version publica para derivar/consultar sin firmar"
     )
     return {"master": master}
 
@@ -427,10 +489,28 @@ def _print_phase_hd_path(master, path: str, *, show_secrets: bool) -> dict[str, 
     parsed = parse_bip32_path(path)
     current = derive_bip32_node_from_master(master)
     print("\nFase D) Ruta HD")
+    print(
+        "   Mapa mental BIP44/BIP84: m / purpose' / coin_type' / account' / change / index"
+    )
     print("   Que entra:")
     print(f"   - Ruta:               {path}")
+    route_tokens = ["m"] + [step.token for step in parsed]
+    level_labels = [
+        "raiz",
+        "purpose'",
+        "coin_type'",
+        "account'",
+        "change",
+        "index",
+    ]
+    print("   Tabla de niveles para ESTA ruta:")
+    print("   nivel | valor   | significado")
+    print("   ------+---------+------------------------------")
+    for i, label in enumerate(level_labels):
+        value = route_tokens[i] if i < len(route_tokens) else "(no aplica)"
+        print(f"   {i:>5} | {value:<7} | {label}")
     print("   Que operacion se hace:")
-    print("   - Derivacion nivel por nivel")
+    print("   - Derivacion nivel por nivel (de m hacia la hoja)")
     if not parsed:
         print("   - m (sin derivacion) | Se mantiene el nodo maestro en depth=0")
     for step in parsed:
@@ -440,7 +520,7 @@ def _print_phase_hd_path(master, path: str, *, show_secrets: bool) -> dict[str, 
         )
         hardened_label = "hardened" if step.hardened else "normal"
         print(
-            f"   - {step.token}: index={index_label}, tipo={hardened_label}, depth={current.depth}, fp_padre={current.parent_fingerprint.hex()}  | index=posicion local, tipo=regla de derivacion, depth=nivel en arbol, fp_padre=huella del padre"
+            f"   - {step.token}: index={index_label}, tipo={hardened_label}, depth={current.depth}, fp_padre={current.parent_fingerprint.hex()}  | avanzamos un nivel del mapa HD"
         )
     print("   Que sale:")
     print(f"   - Nodo depth final:   {current.depth}")
@@ -462,7 +542,7 @@ def _print_phase_address(
     )
     print(f"   - Red:                {network}")
     print("   Que operacion se hace:")
-    print("   - HASH160(pubkey) + witness program + bech32")
+    print("   - Flujo completo: pubkey -> HASH160 -> witness program -> Bech32")
     print("   Que sale:")
     print(
         f"   - HASH160:            {_display_sensitive(p2wpkh.hash160.hex(), show_secrets=show_secrets)}"
@@ -605,6 +685,7 @@ def _run_interactive(wordlist: list[str]) -> int:
         "entropy": None,
         "mnemonic": "",
         "source_label": "",
+        "selected_entropy_bits": None,
         "passphrase": "",
         "network": "mainnet",
         "path": "",
@@ -614,10 +695,13 @@ def _run_interactive(wordlist: list[str]) -> int:
     stage_index = 0
     while stage_index < 5:
         if stage_index == 0:
-            entropy, mnemonic, source_label = _prompt_source_choice(wordlist)
+            entropy, mnemonic, source_label, selected_entropy_bits = (
+                _prompt_source_choice(wordlist)
+            )
             state["entropy"] = entropy
             state["mnemonic"] = mnemonic
             state["source_label"] = source_label
+            state["selected_entropy_bits"] = selected_entropy_bits
             print("\nEtapa 1/5 completada: origen seleccionado")
             print(f"- Origen: {source_label}")
             print(f"- Mnemotecnica: {mnemonic}")
@@ -636,7 +720,11 @@ def _run_interactive(wordlist: list[str]) -> int:
                     )
                     return 4
 
-                b39_action = _run_bip39_guided_substeps(breakdown)
+                b39_action = _run_bip39_guided_substeps(
+                    breakdown,
+                    source_label=source_label,
+                    selected_entropy_bits=selected_entropy_bits,
+                )
                 if b39_action == "cancel":
                     print("Flujo cancelado por usuario. Salida limpia.")
                     return 0
