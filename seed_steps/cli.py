@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import sys
 from importlib.resources import as_file, files
 from pathlib import Path
@@ -23,6 +24,7 @@ from seed_steps.bip39 import build_bip39_breakdown, load_wordlist
 from seed_steps.entropy import generate_entropy, parse_entropy_hex
 from seed_steps.format import group_binary
 from seed_steps.seed import build_bip39_seed_salt, derive_bip39_seed
+from seed_steps import terminal_style as ts
 from seed_steps.trace import MathTrace
 
 
@@ -66,9 +68,56 @@ COLOR_FINAL_ADDRESS = "\033[92m"
 
 
 def _colorize(value: str, color: str, *, enable: bool = True) -> str:
-    if not enable:
+    if not enable or not ts.is_enabled():
         return value
     return f"{color}{value}{COLOR_RESET}"
+
+
+def _format_bits_multiline(bits: str, *, bytes_per_line: int = 8) -> str:
+    chunks = [bits[index : index + 8] for index in range(0, len(bits), 8)]
+    line_size = max(1, bytes_per_line)
+    lines = [
+        " ".join(chunks[index : index + line_size])
+        for index in range(0, len(chunks), line_size)
+    ]
+    return "\n".join(lines)
+
+
+def _color_segmented_bits(bits: str, *, bit_offset: int, entropy_bits_len: int) -> str:
+    rendered: list[str] = []
+    for idx, bit in enumerate(bits):
+        absolute = bit_offset + idx
+        if absolute < entropy_bits_len:
+            rendered.append(ts.cyan(bit))
+        else:
+            rendered.append(ts.pink(bit))
+    return "".join(rendered)
+
+
+def _format_segmented_bits_multiline(
+    bits: str, *, entropy_bits_len: int, bytes_per_line: int = 8
+) -> str:
+    line_size = max(1, bytes_per_line) * 8
+    lines: list[str] = []
+    for start in range(0, len(bits), line_size):
+        line_bits = bits[start : start + line_size]
+        groups: list[str] = []
+        for i in range(0, len(line_bits), 8):
+            chunk = line_bits[i : i + 8]
+            groups.append(
+                _color_segmented_bits(
+                    chunk,
+                    bit_offset=start + i,
+                    entropy_bits_len=entropy_bits_len,
+                )
+            )
+        lines.append(" ".join(groups))
+    return "\n".join(lines)
+
+
+def _print_substep_section(title: str) -> None:
+    print()
+    print(ts.bright_white(title))
 
 
 def _colorized_11_bit_block(block: str, start_bit: int, entropy_bits_len: int) -> str:
@@ -131,6 +180,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-pause",
         action="store_true",
         help="En wizard, desactiva pausas y confirmaciones entre pasos.",
+    )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Desactiva colores ANSI en toda la salida.",
     )
     parser.add_argument(
         "--mnemonic",
@@ -687,86 +741,179 @@ def _run_bip39_guided_substeps(
     """
 
     substeps = [
-        "Subpaso BIP39 1/5: Entropia",
-        "Subpaso BIP39 2/5: Checksum",
-        "Subpaso BIP39 3/5: Bits combinados",
-        "Subpaso BIP39 4/5: Indices (bloques de 11 bits)",
-        "Subpaso BIP39 5/5: Mnemotecnica",
+        "Subpaso BIP39 1/5 — Entropia",
+        "Subpaso BIP39 2/5 — Checksum",
+        "Subpaso BIP39 3/5 — Entropia + checksum",
+        "Subpaso BIP39 4/5 — Bloques de 11 bits",
+        "Subpaso BIP39 5/5 — Indices y palabras",
     ]
 
-    all_traces = _build_bip39_math_traces(breakdown)
-    traces_by_substep = {
-        0: all_traces[0:3],
-        1: all_traces[3:6],
-        2: all_traces[6:7],
-        3: all_traces[7:9],
-        4: all_traces[9:11],
-    }
+    ent = len(breakdown.entropy_bits)
+    cs = len(breakdown.checksum_bits)
+    sha256_bits = bin(int(breakdown.sha256_hex, 16))[2:].zfill(256)
 
     index = 0
     while index < len(substeps):
-        title = substeps[index]
-        print(f"\n{title}")
-        print("   Objetivo del paso: entender esta transformacion antes de avanzar.")
+        print(f"\n{ts.dim('━' * 72)}")
+        print(ts.bright_white(substeps[index]))
+
         if index == 0:
-            _print_stage_entropy(breakdown)
-            entropy_bits = selected_entropy_bits or len(breakdown.entropy_bits)
+            _print_substep_section("Objetivo")
+            print("- Ver origen binario y longitud de ENT.")
+            _print_substep_section("Que es")
             print(
-                "   Que debes observar: tamano de bits y que la fuente coincide con lo elegido."
+                "- La ENTROPIA es la fuente criptografica inicial del pipeline BIP39."
             )
+            _print_substep_section("Por que importa")
+            print("- Si cambia un solo bit, cambia todo: checksum, palabras y seed.")
+            _print_substep_section("Datos de entrada")
+            print(f"- source = {source_label}")
+            print(f"- entropy_hex = {ts.cyan(breakdown.entropy_hex)}")
+            _print_substep_section("Matematica")
+            print(f"- {ts.formula('ENT(bits) = len(entropy_bytes) * 8')}")
+            _print_substep_section("Sustitucion")
             print(
-                f"   Fuente usada:        {source_label} (wizard) | tamano elegido: {_colorize(str(entropy_bits), COLOR_ENTROPY)} bits"
+                f"- {ts.formula(f'ENT = {len(breakdown.entropy_hex) // 2} * 8 = {ent}')}"
             )
-            _render_integrated_math_for_substep(
-                traces_by_substep[index],
-                next_input_label="entropy_bits",
-                next_input_value=breakdown.entropy_bits,
+            _print_substep_section("Desarrollo")
+            print("- entropy_bits (agrupado por bytes):")
+            print(
+                ts.cyan(
+                    _format_bits_multiline(breakdown.entropy_bits, bytes_per_line=8)
+                )
             )
+            _print_substep_section("Resultado")
+            print(f"- {ts.bright_white('ENT =')} {ts.cyan(str(ent))} bits")
+            _print_substep_section("Siguiente paso")
+            print("- Calcular SHA-256(entropia) y extraer CS bits iniciales.")
         elif index == 1:
-            _print_stage_checksum(breakdown)
-            ent_bits = len(breakdown.entropy_bits)
-            checksum_bits = ent_bits // 32
+            _print_substep_section("Objetivo")
+            print("- Obtener CS desde SHA-256(entropia) segun regla BIP39.")
+            _print_substep_section("Que es")
+            print("- CHECKSUM = prefijo del digest SHA-256 de la entropia.")
+            _print_substep_section("Por que importa")
+            print("- Detecta errores de escritura/transcripcion en la mnemotecnica.")
+            _print_substep_section("Datos de entrada")
+            print(f"- ENT = {ts.cyan(str(ent))} bits")
+            print(f"- SHA256(entropy)_hex = {breakdown.sha256_hex}")
+            _print_substep_section("Matematica")
+            print(f"- {ts.formula('CS = ENT / 32')}")
+            print(f"- {ts.formula('checksum_bits = sha256_bits[0:CS]')}")
+            _print_substep_section("Sustitucion")
+            print(f"- {ts.formula(f'CS = {ent}/32 = {cs}')}")
             print(
-                "   Que debes observar: dividir los bits de entropia entre 32 define cuantos bits de checksum se agregan."
+                f"- {ts.formula(f'checksum = sha256_bits[0:{cs}] = {breakdown.checksum_bits}')}"
             )
+            _print_substep_section("Desarrollo")
+            print("- sha256_bits completo (256 bits, agrupado por bytes):")
+            print(_format_bits_multiline(sha256_bits, bytes_per_line=8))
+            _print_substep_section("Resultado")
+            print(f"- {ts.bright_white('CS =')} {ts.pink(str(cs))} bits")
             print(
-                f"   Calculo docente:     {ent_bits} bits / 32 = {checksum_bits} bits de checksum, tomados del inicio de SHA-256(entropia)"
+                f"- {ts.bright_white('checksum =')} {ts.pink(breakdown.checksum_bits)}"
             )
-            _render_integrated_math_for_substep(
-                traces_by_substep[index],
-                next_input_label="checksum_bits",
-                next_input_value=breakdown.checksum_bits,
-            )
+            _print_substep_section("Siguiente paso")
+            print("- Concatenar entropy_bits + checksum_bits.")
         elif index == 2:
-            _print_stage_combined_bits(breakdown, use_color=True)
+            _print_substep_section("Objetivo")
+            print("- Unificar ENT y CS en un flujo unico de bits.")
+            _print_substep_section("Que es")
+            print("- Cadena total de 132/165/198/231/264 bits, segun ENT.")
+            _print_substep_section("Por que importa")
+            print("- Este flujo es el que se divide en bloques de 11 bits.")
+            _print_substep_section("Datos de entrada")
+            print(f"- entropy_bits = {ts.cyan('...')}")
+            print(f"- checksum_bits = {ts.pink(breakdown.checksum_bits)}")
+            _print_substep_section("Matematica")
             print(
-                "   Que debes observar: cian=entropia y amarillo=checksum dentro del mismo flujo de bits."
+                f"- {ts.formula('entropy_plus_checksum = entropy_bits + checksum_bits')}"
             )
-            _render_integrated_math_for_substep(
-                traces_by_substep[index],
-                next_input_label="entropy_plus_checksum_bits",
-                next_input_value=breakdown.entropy_plus_checksum_bits,
+            _print_substep_section("Sustitucion")
+            print(f"- {ts.formula(f'total_bits = {ent} + {cs} = {ent + cs}')}")
+            _print_substep_section("Desarrollo")
+            print("- entropy_plus_checksum (agrupado por bytes):")
+            print(
+                _format_segmented_bits_multiline(
+                    breakdown.entropy_plus_checksum_bits,
+                    entropy_bits_len=len(breakdown.entropy_bits),
+                    bytes_per_line=8,
+                )
             )
+            _print_substep_section("Resultado")
+            print(f"- {ts.bright_white('full_bits_length =')} {ent + cs} bits")
+            _print_substep_section("Siguiente paso")
+            print("- Partir el flujo completo en bloques de 11 bits.")
         elif index == 3:
-            _print_stage_indices_colored(breakdown)
+            _print_substep_section("Objetivo")
+            print("- Visualizar TODOS los bloques de 11 bits sin truncar.")
+            _print_substep_section("Que es")
+            print("- Cada bloque representa un indice decimal entre 0 y 2047.")
+            _print_substep_section("Por que importa")
+            print("- El orden exacto de bloques define el orden exacto de palabras.")
+            _print_substep_section("Datos de entrada")
+            print(f"- total_bits = {ent + cs}")
+            _print_substep_section("Matematica")
+            print(f"- {ts.formula('num_words = (ENT + CS) / 11')}")
+            _print_substep_section("Sustitucion")
             print(
-                "   Que debes observar: cada bloque de 11 bits se convierte en un indice de la wordlist."
+                f"- {ts.formula(f'num_words = ({ent} + {cs}) / 11 = {len(breakdown.bit_blocks)}')}"
             )
-            _render_integrated_math_for_substep(
-                traces_by_substep[index],
-                next_input_label="indices",
-                next_input_value=str([step.index for step in breakdown.steps]),
+            _print_substep_section("Desarrollo")
+            for pos, block in enumerate(breakdown.bit_blocks, start=1):
+                start_bit = (pos - 1) * 11
+                block_colored = _color_segmented_bits(
+                    block,
+                    bit_offset=start_bit,
+                    entropy_bits_len=len(breakdown.entropy_bits),
+                )
+                print(f"- bloque[{pos:02d}] = {block_colored}")
+            _print_substep_section("Resultado")
+            print(
+                f"- {ts.bright_white('Bloques 11-bit generados =')} {len(breakdown.bit_blocks)}"
             )
+            _print_substep_section("Siguiente paso")
+            print("- Convertir cada bloque binario a indice y luego a palabra.")
         else:
-            _print_stage_mnemonic_colored(breakdown)
+            _print_substep_section("Objetivo")
+            print("- Mapear bloques -> indices -> palabras BIP39.")
+            _print_substep_section("Que es")
             print(
-                "   Que debes observar: el orden de palabras depende exactamente del orden de bloques."
+                "- Lookup directo: indice decimal dentro de wordlist de 2048 palabras."
             )
-            _render_integrated_math_for_substep(
-                traces_by_substep[index],
-                next_input_label="mnemonic",
-                next_input_value=breakdown.mnemonic,
+            _print_substep_section("Por que importa")
+            print("- Es la representacion humana portable de la entropia+checksum.")
+            _print_substep_section("Datos de entrada")
+            print(f"- word_count = {len(breakdown.steps)}")
+            _print_substep_section("Matematica")
+            print(f"- {ts.formula('indice = int(bloque_11_bits, 2)')}")
+            print(f"- {ts.formula('palabra = wordlist[indice]')}")
+            _print_substep_section("Sustitucion")
+            print(
+                f"- {ts.formula(f'ultimo: int({breakdown.steps[-1].bit_block}, 2) = {breakdown.steps[-1].index}')}"
             )
+            _print_substep_section("Desarrollo")
+            print("- pos | bloque(11-bit) | indice | palabra")
+            print("- ----+----------------+--------+----------")
+            for pos, step in enumerate(breakdown.steps, start=1):
+                block_colored = _color_segmented_bits(
+                    step.bit_block,
+                    bit_offset=(pos - 1) * 11,
+                    entropy_bits_len=len(breakdown.entropy_bits),
+                )
+                print(
+                    "- "
+                    f"{pos:>3} | {block_colored} | {ts.bright_white(str(step.index).rjust(6))} | {ts.orange(step.word)}"
+                )
+            _print_substep_section("Resultado")
+            colored_mnemonic = " ".join(
+                ts.orange(word) for word in breakdown.mnemonic.split()
+            )
+            print(
+                f"- wordlist[{breakdown.steps[-1].index}] = {breakdown.steps[-1].word}"
+            )
+            print(f"- {ts.bright_white('Mnemonic:')} {colored_mnemonic}")
+            _print_substep_section("Siguiente paso")
+            print("- Continuar a derivacion de seed (PBKDF2).")
 
         action = (
             "continue" if not pause_between_steps else _prompt_continue_with_options()
@@ -1781,6 +1928,7 @@ def _print_full_journey(
 def run() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    ts.set_enabled(not args.no_color and os.getenv("NO_COLOR") is None)
 
     wordlist_path = files("seed_steps").joinpath("data/english.txt")
 

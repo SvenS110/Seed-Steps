@@ -229,11 +229,11 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
     assert captured.err == ""
     assert "Bienvenido a Seed Steps by SvenS101" in captured.out
     assert "Etapa 1/5 completada: origen seleccionado" in captured.out
-    assert "Subpaso BIP39 1/5: Entropia" in captured.out
+    assert "Subpaso BIP39 1/5 — Entropia" in captured.out
     assert "Objetivo del paso:" in captured.out
     assert "Que debes observar:" in captured.out
-    assert "Subpaso BIP39 4/5: Indices (bloques de 11 bits)" in captured.out
-    assert "Subpaso BIP39 5/5: Mnemotecnica" in captured.out
+    assert "Subpaso BIP39 4/5 — Bloques de 11 bits" in captured.out
+    assert "Subpaso BIP39 5/5 — Indices y palabras" in captured.out
     assert "Fase B) Seed BIP39" in captured.out
     assert "Micro-operacion 1" in captured.out
     assert "- Entrada:" in captured.out
@@ -297,7 +297,7 @@ def test_cli_interactive_guided_retries_invalid_inputs(capsys, monkeypatch) -> N
     assert captured.err == ""
     assert "Opcion invalida. Escribe A, E o M." in captured.out
     assert "Entrada invalida: Entropy hexadecimal invalida" in captured.out
-    assert "Subpaso BIP39 2/5: Checksum" in captured.out
+    assert "Subpaso BIP39 2/5 — Checksum" in captured.out
     assert "Fase B) Seed BIP39" in captured.out
     assert "Fase F) Resumen final" in captured.out
     assert "Direccion final:" in captured.out
@@ -381,6 +381,7 @@ def test_cli_wizard_no_pause_entropy_zero_shows_known_bip39_math_trace(
             "--entropy",
             "00000000000000000000000000000000",
             "--no-pause",
+            "--no-color",
         ],
     )
 
@@ -393,18 +394,44 @@ def test_cli_wizard_no_pause_entropy_zero_shows_known_bip39_math_trace(
         "Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         in captured.out
     )
-    assert "Detecta errores al escribir o transcribir la mnemotecnica" in captured.out
+    assert "CHECKSUM = prefijo del digest SHA-256 de la entropia" in captured.out
     assert "ENT = 128 bits" in captured.out
     assert "CS = 4 bits" in captured.out
     assert "checksum = 0011" in captured.out
     assert "full_bits_length = 132 bits" in captured.out
     assert "wordlist[3] = about" in captured.out
+    assert captured.out.count("00000000000") >= 11
+    assert "00000000011" in captured.out
     assert (
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         in captured.out
     )
     assert "Traza 1)" not in captured.out
     assert "Traza " not in captured.out
+
+
+def test_cli_colors_respect_no_color_and_default_mode(capsys, monkeypatch) -> None:
+    base_argv = [
+        "seed-steps",
+        "--wizard",
+        "--entropy",
+        "00000000000000000000000000000000",
+        "--no-pause",
+    ]
+
+    monkeypatch.setattr(sys, "argv", base_argv)
+    exit_code_color = run()
+    output_color = capsys.readouterr().out
+
+    assert exit_code_color == 0
+    assert "\x1b[" in output_color
+
+    monkeypatch.setattr(sys, "argv", base_argv + ["--no-color"])
+    exit_code_no_color = run()
+    output_no_color = capsys.readouterr().out
+
+    assert exit_code_no_color == 0
+    assert "\x1b[" not in output_no_color
 
 
 def test_cli_derives_seed_from_explicit_mnemonic(capsys, monkeypatch) -> None:
