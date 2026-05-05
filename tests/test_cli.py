@@ -230,20 +230,18 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
     assert "Bienvenido a Seed Steps by SvenS101" in captured.out
     assert "Etapa 1/5 completada: origen seleccionado" in captured.out
     assert "Subpaso BIP39 1/5 — Entropia" in captured.out
-    assert "Objetivo del paso:" in captured.out
-    assert "Que debes observar:" in captured.out
+    assert "Objetivo" in captured.out
+    assert "Que es" in captured.out
     assert "Subpaso BIP39 4/5 — Bloques de 11 bits" in captured.out
     assert "Subpaso BIP39 5/5 — Indices y palabras" in captured.out
     assert "Fase B) Seed BIP39" in captured.out
-    assert "Micro-operacion 1" in captured.out
-    assert "- Entrada:" in captured.out
-    assert "- Operacion:" in captured.out
-    assert "- Salida:" in captured.out
+    assert "Micro-operacion" not in captured.out
+    assert "ENTER para ejecutar micro-operacion" not in captured.out
     assert "Fase C) Master BIP32" in captured.out
     assert "Fase D) Ruta HD" in captured.out
     assert "Fase E) Direccion" in captured.out
     assert "Fase F) Resumen final" in captured.out
-    assert "Direccion final:" in captured.out
+    assert "direccion final =" in captured.out
     assert "Nota docente: en el wizard se muestran valores COMPLETOS" in captured.out
 
 
@@ -300,7 +298,7 @@ def test_cli_interactive_guided_retries_invalid_inputs(capsys, monkeypatch) -> N
     assert "Subpaso BIP39 2/5 — Checksum" in captured.out
     assert "Fase B) Seed BIP39" in captured.out
     assert "Fase F) Resumen final" in captured.out
-    assert "Direccion final:" in captured.out
+    assert "direccion final =" in captured.out
     assert "tb1" in captured.out
 
 
@@ -408,6 +406,11 @@ def test_cli_wizard_no_pause_entropy_zero_shows_known_bip39_math_trace(
     )
     assert "Traza 1)" not in captured.out
     assert "Traza " not in captured.out
+    assert "Micro-operacion" not in captured.out
+    assert "master_private_key = parse256(IL)" in captured.out
+    assert "hardened_index = index + 2^31" in captured.out
+    assert "k_child = (parse256(IL) + k_parent) mod n" in captured.out
+    assert "data_5bit = convertbits" in captured.out
     assert "iterations = 2048" in captured.out
     assert "iteracion 0001" in captured.out
     assert "iteracion 0002" in captured.out
@@ -418,6 +421,32 @@ def test_cli_wizard_no_pause_entropy_zero_shows_known_bip39_math_trace(
     assert "iteracion 2048" in captured.out
     assert "T_1 = U_1 XOR U_2 XOR ... XOR U_2048" in captured.out
     assert "len(seed) = 64 bytes" in captured.out
+
+
+def test_cli_wizard_phase_d_has_single_clean_substep_flow(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--wizard",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-pause",
+            "--no-color",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert captured.out.count("Subpaso 4/6 — Derivacion CKDpriv") == 1
+    assert "Micro-operacion" not in captured.out
+    assert "Entrada: entrada" not in captured.out
+    assert "Operacion:" not in captured.out
+    assert "Salida: salida" not in captured.out
 
 
 def test_cli_colors_respect_no_color_and_default_mode(capsys, monkeypatch) -> None:

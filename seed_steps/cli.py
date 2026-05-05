@@ -1049,15 +1049,6 @@ def _print_phase_seed_bip39(
         "Seed final",
     ]
     for index, name in enumerate(substeps, start=1):
-        if interactive_micro_steps:
-            _prompt_micro_operation(
-                number=index,
-                input_data="entrada del subpaso",
-                operation=name,
-                output_data="salida para siguiente subpaso",
-                enable=True,
-            )
-
         _print_substep_header(2, index, len(substeps), name)
         if index == 1:
             _print_substep_sections(
@@ -1259,14 +1250,6 @@ def _print_phase_master_bip32(
         "Nodo maestro final",
     ]
     for index, name in enumerate(substeps, start=1):
-        if interactive_micro_steps:
-            _prompt_micro_operation(
-                number=index,
-                input_data="entrada",
-                operation=name,
-                output_data="salida",
-                enable=True,
-            )
         _print_substep_header(3, index, len(substeps), name)
         if index == 1:
             _print_substep_sections(
@@ -1301,10 +1284,17 @@ def _print_phase_master_bip32(
         elif index == 3:
             _print_substep_sections(
                 objective=["Separar secreto y cadena de derivacion."],
-                what_is=["IL=master key, IR=chain code."],
+                what_is=[
+                    "IL = material candidato a master private key.",
+                    "IR = master chain code.",
+                ],
                 why=["Cumplen roles distintos en derivacion HD."],
                 inputs=["I = IL || IR"],
-                math=[ts.formula("IL = I[0:32], IR = I[32:64]")],
+                math=[
+                    ts.formula("IL = I[0:32], IR = I[32:64]"),
+                    ts.formula("master_private_key = parse256(IL)"),
+                    ts.formula("master_chain_code = IR"),
+                ],
                 substitution=[ts.formula("32 bytes + 32 bytes")],
                 development=[
                     f"IL = {_colorize(il_hex, COLOR_IL)}",
@@ -1385,14 +1375,7 @@ def _print_phase_hd_path(
     derivation_log: list[str] = []
     if not parsed:
         derivation_log.append("m (sin derivacion): nodo maestro depth=0")
-    for micro_index, step in enumerate(parsed, start=1):
-        _prompt_micro_operation(
-            number=micro_index,
-            input_data=f"nodo nivel={current.depth} + paso={step.token}",
-            operation="CKDpriv segun tipo hardened/normal",
-            output_data="nodo hijo del siguiente nivel",
-            enable=interactive_micro_steps,
-        )
+    for step in parsed:
         current = derive_bip32_path_from_node(current, f"m/{step.token}")
         index_label = (
             step.child_number - HARDENED_OFFSET if step.hardened else step.child_number
@@ -1411,14 +1394,6 @@ def _print_phase_hd_path(
         "Material derivado",
     ]
     for index, name in enumerate(substeps, start=1):
-        if interactive_micro_steps:
-            _prompt_micro_operation(
-                number=index,
-                input_data="entrada",
-                operation=name,
-                output_data="salida",
-                enable=True,
-            )
         _print_substep_header(4, index, len(substeps), name)
         if index == 1:
             _print_substep_sections(
@@ -1464,8 +1439,28 @@ def _print_phase_hd_path(
                 what_is=["CKDpriv hardened o normal segun token."],
                 why=["Construye camino determinista desde master."],
                 inputs=["master node + pasos"],
-                math=[ts.formula("child = CKDpriv(parent, index)")],
-                substitution=[ts.formula("hardened => index + 2^31")],
+                math=[
+                    ts.formula("child = CKDpriv(parent, index)"),
+                    ts.formula("hardened_index = index + 2^31"),
+                    ts.formula(
+                        "data = 0x00 || ser256(k_parent) || ser32(hardened_index)"
+                    ),
+                    ts.formula("I = HMAC-SHA512(key=c_parent, data=data)"),
+                    ts.formula("IL, IR = I[0:32], I[32:64]"),
+                    ts.formula("k_child = (parse256(IL) + k_parent) mod n"),
+                    ts.formula("c_child = IR"),
+                    ts.formula("data = serP(point(k_parent)) || ser32(index)"),
+                    ts.formula("I = HMAC-SHA512(key=c_parent, data=data)"),
+                    ts.formula("IL, IR = I[0:32], I[32:64]"),
+                    ts.formula("k_child = (parse256(IL) + k_parent) mod n"),
+                    ts.formula("c_child = IR"),
+                ],
+                substitution=[
+                    ts.formula(
+                        "Ejemplo hardened: m/84' => index=84, hardened_index=84+2^31"
+                    ),
+                    ts.formula("Ejemplo normal: /0 => index=0"),
+                ],
                 development=derivation_log,
                 result=["salida -> nodo hoja depth final"],
                 next_step=["Consolidar metadata del nodo hoja."],
@@ -1519,14 +1514,6 @@ def _print_phase_address(
         "Direccion final",
     ]
     for index, name in enumerate(substeps, start=1):
-        if interactive_micro_steps:
-            _prompt_micro_operation(
-                number=index,
-                input_data="entrada",
-                operation=name,
-                output_data="salida",
-                enable=True,
-            )
         _print_substep_header(5, index, len(substeps), name)
         if index == 1:
             _print_substep_sections(
@@ -1592,11 +1579,23 @@ def _print_phase_address(
                 what_is=["Bech32 sobre HRP + datos witness."],
                 why=["Formato robusto y legible para SegWit."],
                 inputs=["hrp + witness program"],
-                math=[ts.formula("address = bech32_encode(hrp, witness)")],
+                math=[
+                    ts.formula("hrp = 'bc' o 'tb'"),
+                    ts.formula("witness_version = 0"),
+                    ts.formula("witness_program = HASH160(pubkey)"),
+                    ts.formula(
+                        "data_5bit = convertbits(witness_version + witness_program, 8 -> 5)"
+                    ),
+                    ts.formula("checksum = bech32_polymod(...)"),
+                    ts.formula("address = hrp + '1' + data_5bit + checksum"),
+                ],
                 substitution=[
                     ts.formula(f"hrp={p2wpkh.hrp}, v={p2wpkh.witness_version}")
                 ],
-                development=["checksum Bech32 integrado en la cadena final"],
+                development=[
+                    "Flujo: pubkey -> HASH160 -> witness_program -> convertbits -> checksum",
+                    "checksum Bech32 integrado en la cadena final",
+                ],
                 result=["salida -> address string"],
                 next_step=["Presentar direccion final consolidada."],
             )
@@ -1630,54 +1629,49 @@ def _print_phase_final_summary(
     show_secrets: bool,
 ) -> None:
     print("\nFase F) Resumen final")
-    print("   Objetivo del paso: consolidar entradas y salidas clave del recorrido.")
-    print(
-        "   Que debes observar: con estos mismos datos siempre obtienes el mismo resultado."
-    )
-    print("   Inputs usados:")
+    print(f"{ts.dim('━' * 88)}")
+    print(ts.bright_white("Subpaso 1/1 — Consolidado final"))
+    _print_substep_section("Objetivo")
+    print("- Consolidar entradas y salidas clave del recorrido.")
+    _print_substep_section("Que es")
+    print("- Snapshot final reproducible del flujo ENT -> BIP39 -> BIP32 -> direccion.")
+    _print_substep_section("Por que importa")
+    print("- Con estos mismos datos siempre obtienes exactamente el mismo resultado.")
+    _print_substep_section("Datos de entrada")
     colored_mnemonic = " ".join(
         _colorize(word, COLOR_WORD) for word in mnemonic.split()
     )
-    print(f"   - Mnemonic:           {colored_mnemonic}")
-    print()
+    print(f"- Inputs:\n  - mnemonic = {colored_mnemonic}")
     print(
-        f"   - Passphrase:         {_colorize(_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets), COLOR_PASSPHRASE)}"
+        f"  - passphrase = {_colorize(_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets), COLOR_PASSPHRASE)}"
     )
-    print()
-    print(f"   - Ruta:               {path}")
-    print()
-    print(f"   - Red:                {network}")
-    print()
-    print("   Outputs clave:")
+    print(f"  - path = {path}")
+    print(f"  - network = {network}")
+    _print_substep_section("Resultado")
     print(
-        f"   - Seed:               {_colorize(_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED)}"
+        f"- Outputs:\n  - seed = {_colorize(format_long_hex(_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), groups_per_line=2), COLOR_SEED)}"
     )
-    print()
     print(
-        f"   - IL master:          {_colorize(_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets), COLOR_IL)}"
+        f"  - IL master = {_colorize(format_long_hex(_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets), groups_per_line=2), COLOR_IL)}"
     )
-    print()
     print(
-        f"   - IR master:          {_colorize(_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets), COLOR_IR)}"
+        f"  - IR master = {_colorize(format_long_hex(_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets), groups_per_line=2), COLOR_IR)}"
     )
-    print()
     print(
-        f"   - xprv master:        {_colorize(_display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
+        f"  - xprv master = {_colorize(format_long_hex(_display_sensitive(master.xprv, show_secrets=show_secrets), hex_per_group=16, groups_per_line=3), COLOR_XPRV)}"
     )
-    print()
-    print(f"   - xpub master:        {_colorize(master.xpub, COLOR_XPUB)}")
-    print()
     print(
-        f"   - xprv derivado:      {_colorize(_display_sensitive(derived.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
+        f"  - xpub master = {_colorize(format_long_hex(master.xpub, hex_per_group=16, groups_per_line=3), COLOR_XPUB)}"
     )
-    print()
-    print(f"   - xpub derivado:      {_colorize(derived.xpub, COLOR_XPUB)}")
-    print()
     print(
-        f"   - Direccion final:    {_colorize(final_addr.address, COLOR_FINAL_ADDRESS)}"
+        f"  - xprv derivado = {_colorize(format_long_hex(_display_sensitive(derived.xprv, show_secrets=show_secrets), hex_per_group=16, groups_per_line=3), COLOR_XPRV)}"
     )
-    print()
-    print("   ADVERTENCIA: EDUCATIVO, NO CUSTODIA REAL")
+    print(
+        f"  - xpub derivado = {_colorize(format_long_hex(derived.xpub, hex_per_group=16, groups_per_line=3), COLOR_XPUB)}"
+    )
+    print(f"  - direccion final = {_colorize(final_addr.address, COLOR_FINAL_ADDRESS)}")
+    _print_substep_section("Siguiente paso")
+    print("- ADVERTENCIA: EDUCATIVO, NO CUSTODIA REAL")
 
 
 def _run_interactive_guided_pipeline(state: dict[str, object]) -> int:
