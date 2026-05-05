@@ -47,6 +47,16 @@ Modo wizard interactivo paso a paso:
 seed-steps --interactive
 ```
 
+Desde HITO 11.2, este wizard es GUIADO por etapas con validacion y confirmacion S/N entre pasos:
+
+- Etapa 1: origen (`entropia automatica` / `entropia manual` / `mnemotecnica manual`).
+- Etapa 2: passphrase (vacia permitida).
+- Etapa 3: red (`mainnet`/`testnet`).
+- Etapa 4: ruta HD (default sugerida por red o manual).
+- Etapa 5: politica de secretos (redactado por defecto; revelar exige advertencia + confirmacion extra).
+- Al cerrar cada etapa: `Continuar al siguiente paso? (S/N)`.
+- Si respondes `N`: puedes `[C]ancelar flujo` o `[E]ditar` esa etapa y reintentar.
+
 Alias equivalente:
 
 ```bash

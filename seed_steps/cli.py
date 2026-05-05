@@ -217,6 +217,131 @@ def _prompt_entropy_choice() -> bytes:
         print("Opcion invalida. Escribe A para automatica o M para manual.")
 
 
+def _prompt_yes_no(prompt: str) -> bool:
+    while True:
+        choice = input(prompt).strip().lower()
+        if choice in {"s", "si", "y", "yes"}:
+            return True
+        if choice in {"n", "no"}:
+            return False
+        print("Entrada invalida. Responde S o N.")
+
+
+def _prompt_continue_with_options() -> str:
+    while True:
+        if _prompt_yes_no("\nContinuar al siguiente paso? (S/N): "):
+            return "continue"
+
+        decision = (
+            input("Elige: [C]ancelar flujo / [E]ditar esta etapa: ").strip().lower()
+        )
+        if decision in {"c", "cancelar"}:
+            return "cancel"
+        if decision in {"e", "editar", "r", "reintentar"}:
+            return "retry"
+        print("Opcion invalida. Escribe C para cancelar o E para editar.")
+
+
+def _prompt_source_choice(wordlist: list[str]) -> tuple[bytes | None, str, str]:
+    while True:
+        choice = (
+            input(
+                "\nOrigen de mnemotecnica: [A] Entropia automatica / [E] Entropia manual / [M] Mnemotecnica manual: "
+            )
+            .strip()
+            .lower()
+        )
+
+        if choice in {"a", "auto", "automatica", "automatic"}:
+            entropy = generate_entropy(16)
+            breakdown = build_bip39_breakdown(entropy, wordlist)
+            return entropy, breakdown.mnemonic, "entropia automatica"
+
+        if choice in {"e", "entropia", "entropia manual", "manual"}:
+            while True:
+                entropy_hex = input(
+                    "Ingresa entropy hex (128/160/192/224/256 bits): "
+                ).strip()
+                try:
+                    entropy = parse_entropy_hex(entropy_hex)
+                    breakdown = build_bip39_breakdown(entropy, wordlist)
+                    return entropy, breakdown.mnemonic, "entropia manual"
+                except ValueError as exc:
+                    print(f"Entrada invalida: {exc}. Intenta nuevamente.")
+
+        if choice in {"m", "mnemonica", "mnemotecnica", "mnemonica manual"}:
+            while True:
+                mnemonic = input("Ingresa mnemotecnica BIP39 manual: ").strip()
+                words = [word for word in mnemonic.split() if word]
+                if len(words) not in {12, 15, 18, 21, 24}:
+                    print(
+                        "Entrada invalida: la mnemotecnica debe tener 12/15/18/21/24 palabras."
+                    )
+                    continue
+                invalid_words = [word for word in words if word not in wordlist]
+                if invalid_words:
+                    print(
+                        "Entrada invalida: hay palabras fuera de la wordlist BIP39 inglesa. "
+                        f"Ejemplo invalido: {invalid_words[0]}."
+                    )
+                    continue
+                return None, " ".join(words), "mnemotecnica manual"
+
+        print("Opcion invalida. Escribe A, E o M.")
+
+
+def _prompt_passphrase() -> str:
+    return input("\nPassphrase BIP39 (Enter para vacia): ")
+
+
+def _prompt_network() -> str:
+    while True:
+        network = input("\nRed objetivo [mainnet/testnet]: ").strip().lower()
+        if network in {"mainnet", "m"}:
+            return "mainnet"
+        if network in {"testnet", "t"}:
+            return "testnet"
+        print("Entrada invalida. Escribe mainnet o testnet.")
+
+
+def _prompt_hd_path(network: str) -> str:
+    default_path = _default_path_for_network(network)
+    while True:
+        mode = (
+            input(f"\nRuta HD: [D]efault sugerida ({default_path}) / [M]anual: ")
+            .strip()
+            .lower()
+        )
+        if mode in {"d", "default", ""}:
+            return default_path
+        if mode in {"m", "manual"}:
+            path = input("Ingresa ruta HD (ej: m/84'/0'/0'/0/0): ").strip()
+            try:
+                parse_bip32_path(path)
+                return path
+            except ValueError as exc:
+                print(f"Entrada invalida: {exc}. Intenta nuevamente.")
+            continue
+        print("Opcion invalida. Escribe D o M.")
+
+
+def _prompt_show_secrets() -> bool:
+    print("\nPolitica de seguridad: secretos REDACTADOS por defecto.")
+    wants_reveal = _prompt_yes_no("Deseas revelar secretos en pantalla? (S/N): ")
+    if not wants_reveal:
+        return False
+
+    print(
+        "ADVERTENCIA CRITICA: revelar secretos puede exponer material custodial en logs e historial."
+    )
+    confirm = input("Escribe REVELAR para confirmar (o Enter para cancelar): ").strip()
+    if confirm != "REVELAR":
+        print("Revelacion cancelada. Se mantiene redaccion de secretos.")
+        return False
+    _print_secrets_warning()
+    return True
+
+
 def _print_detailed_breakdown(breakdown) -> None:
     _print_stage_entropy(breakdown)
     print()
@@ -231,35 +356,83 @@ def _print_detailed_breakdown(breakdown) -> None:
 
 def _run_interactive(wordlist: list[str]) -> int:
     _print_header()
-    print("Bienvenido al modo wizard de Seed Steps.")
-    print("Veras cada etapa de BIP39 y avanzaras cuando presiones Enter.")
+    print("Bienvenido al wizard guiado 11.2 de Seed Steps.")
+    print("Cada etapa pide datos, valida entrada y confirma continuidad (S/N).")
 
-    entropy = _prompt_entropy_choice()
+    state: dict[str, object] = {
+        "entropy": None,
+        "mnemonic": "",
+        "source_label": "",
+        "passphrase": "",
+        "network": "mainnet",
+        "path": "",
+        "show_secrets": False,
+    }
+
+    stage_index = 0
+    while stage_index < 5:
+        if stage_index == 0:
+            entropy, mnemonic, source_label = _prompt_source_choice(wordlist)
+            state["entropy"] = entropy
+            state["mnemonic"] = mnemonic
+            state["source_label"] = source_label
+            print("\nEtapa 1/5 completada: origen seleccionado")
+            print(f"- Origen: {source_label}")
+            print(f"- Mnemotecnica: {mnemonic}")
+
+        elif stage_index == 1:
+            passphrase = _prompt_passphrase()
+            state["passphrase"] = passphrase
+            print("\nEtapa 2/5 completada: passphrase configurada")
+            print(f"- Passphrase: {_display_sensitive(passphrase, show_secrets=False)}")
+
+        elif stage_index == 2:
+            network = _prompt_network()
+            state["network"] = network
+            print("\nEtapa 3/5 completada: red seleccionada")
+            print(f"- Red: {network}")
+
+        elif stage_index == 3:
+            path = _prompt_hd_path(str(state["network"]))
+            state["path"] = path
+            print("\nEtapa 4/5 completada: ruta HD definida")
+            print(f"- Ruta: {path}")
+
+        else:
+            show_secrets = _prompt_show_secrets()
+            state["show_secrets"] = show_secrets
+            print("\nEtapa 5/5 completada: politica de visualizacion")
+            print("- Secretos: visibles" if show_secrets else "- Secretos: redactados")
+
+        action = _prompt_continue_with_options()
+        if action == "cancel":
+            print("Flujo cancelado por usuario. Salida limpia.")
+            return 0
+        if action == "continue":
+            stage_index += 1
 
     try:
-        breakdown = build_bip39_breakdown(entropy, wordlist)
+        return _print_full_journey(
+            entropy=state["entropy"],
+            mnemonic=str(state["mnemonic"]),
+            passphrase=str(state["passphrase"]),
+            path=str(state["path"]),
+            network=str(state["network"]),
+            wordlist=wordlist,
+            compare_passphrase=None,
+            compare_path=None,
+            show_secrets=bool(state["show_secrets"]),
+        )
     except ValueError as exc:
         print(
             _error_message(
-                "DOMINIO BIP39",
-                f"validacion de reglas BIP39 fallida ({exc})",
-                "revisa la entropia y la integridad de la wordlist",
+                "DOMINIO BIP32",
+                f"no se pudo derivar flujo guiado ({exc})",
+                "verifica mnemotecnica, passphrase, ruta y red",
             ),
             file=sys.stderr,
         )
         return 4
-
-    _prompt_continue()
-    _print_stage_entropy(breakdown)
-    _prompt_continue()
-    _print_stage_checksum(breakdown)
-    _prompt_continue()
-    _print_stage_combined_bits(breakdown)
-    _prompt_continue()
-    _print_stage_indices(breakdown)
-    _prompt_continue()
-    _print_stage_mnemonic(breakdown)
-    return 0
 
 
 def _print_compact_breakdown(breakdown) -> None:

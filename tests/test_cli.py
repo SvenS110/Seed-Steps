@@ -185,40 +185,21 @@ def test_cli_fails_with_domain_validation_error(capsys, monkeypatch) -> None:
     assert "2048 palabras" in captured.err
 
 
-def test_cli_interactive_auto_mode_guides_all_stages(capsys, monkeypatch) -> None:
+def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
     monkeypatch.setattr(sys, "argv", ["seed-steps", "--interactive"])
-
-    inputs = iter(["a", "", "", "", "", ""])
-    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
-
-    exit_code = run()
-    captured = capsys.readouterr()
-
-    assert exit_code == 0
-    assert captured.err == ""
-    assert "Bienvenido al modo wizard de Seed Steps." in captured.out
-    assert "1. Entropia" in captured.out
-    assert "2. Checksum" in captured.out
-    assert "3. Bits combinados" in captured.out
-    assert "4. Indices" in captured.out
-    assert "5. Mnemotecnica" in captured.out
-
-
-def test_cli_interactive_manual_entropy_retries_on_invalid_input(
-    capsys, monkeypatch
-) -> None:
-    monkeypatch.setattr(sys, "argv", ["seed-steps", "--wizard"])
 
     inputs = iter(
         [
-            "manual",
-            "zzzz",
-            "00000000000000000000000000000000",
+            "a",
+            "s",
             "",
-            "",
-            "",
-            "",
-            "",
+            "s",
+            "mainnet",
+            "s",
+            "d",
+            "s",
+            "n",
+            "s",
         ]
     )
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
@@ -228,12 +209,67 @@ def test_cli_interactive_manual_entropy_retries_on_invalid_input(
 
     assert exit_code == 0
     assert captured.err == ""
-    assert "Entrada invalida:" in captured.out
-    assert "Entropia (hex):      00000000000000000000000000000000" in captured.out
-    assert (
-        "Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-        in captured.out
+    assert "wizard guiado 11.2" in captured.out
+    assert "Etapa 1/5 completada: origen seleccionado" in captured.out
+    assert "Modo: Full Journey E2E (educativo guiado)" in captured.out
+    assert "Red:                 mainnet (bc)" in captured.out
+
+
+def test_cli_interactive_guided_retries_invalid_inputs(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["seed-steps", "--wizard"])
+
+    inputs = iter(
+        [
+            "x",
+            "e",
+            "zzzz",
+            "00000000000000000000000000000000",
+            "s",
+            "",
+            "s",
+            "devnet",
+            "testnet",
+            "s",
+            "m",
+            "84'/0'/0'/0/0",
+            "m",
+            "m/84'/1'/0'/0/0",
+            "s",
+            "s",
+            "NOPE",
+            "s",
+        ]
     )
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Opcion invalida. Escribe A, E o M." in captured.out
+    assert "Entrada invalida: Entropy hexadecimal invalida" in captured.out
+    assert "Entrada invalida. Escribe mainnet o testnet." in captured.out
+    assert "Ruta BIP32 invalida" in captured.out
+    assert "Revelacion cancelada. Se mantiene redaccion de secretos." in captured.out
+    assert "Red:                 testnet (tb)" in captured.out
+
+
+def test_cli_interactive_guided_continue_no_can_cancel_flow(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["seed-steps", "--interactive"])
+
+    inputs = iter(["a", "n", "c"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Flujo cancelado por usuario. Salida limpia." in captured.out
+    assert "Modo: Full Journey E2E" not in captured.out
 
 
 def test_cli_derives_seed_from_explicit_mnemonic(capsys, monkeypatch) -> None:
