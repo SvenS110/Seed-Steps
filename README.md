@@ -1,226 +1,463 @@
-# Seed Steps (Python)
+# Seed Steps
 
-CLI educativa para entender BIP39 paso a paso: desde entropia hexadecimal hasta mnemotecnica de 12 palabras.
+De la entropia a una direccion Bitcoin, paso a paso.
 
-## Objetivo de esta fase
+> Seed Steps no intenta ocultar la magia: la abre, la separa en pasos y la muestra en la terminal.
 
-- Mostrar el proceso BIP39 de forma transparente y verificable.
-- Mantener separacion entre logica (`seed_steps/*.py`) y presentacion CLI (`seed_steps/cli.py`).
-- Incluye derivacion de master node BIP32 (xprv/xpub mainnet) desde seed BIP39.
-- Incluye derivacion de seed BIP39 (PBKDF2-HMAC-SHA512, 2048 iteraciones).
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
+![Bitcoin](https://img.shields.io/badge/Bitcoin-self--custody-F7931A?logo=bitcoin&logoColor=white)
+![BIP39](https://img.shields.io/badge/BIP-39-111111)
+![BIP32](https://img.shields.io/badge/BIP-32-111111)
+![BIP84](https://img.shields.io/badge/BIP-84-111111)
 
-## Requisitos
-
-- Python 3.11+
-
-## Instalacion (entorno local)
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[dev]"
-```
-
-## Uso
-
-Generar entropia de 128 bits automaticamente:
-
-```bash
-seed-steps
-```
-
-Usar entropia fija:
-
-```bash
-seed-steps --entropy 00000000000000000000000000000000
-```
-
-Modo compacto (sin tabla detallada por palabra):
+## Demo rapida
 
 ```bash
 seed-steps --entropy 00000000000000000000000000000000 --compact
 ```
 
-Modo wizard interactivo paso a paso:
+Salida esperada (recortada):
 
-```bash
-seed-steps --interactive
+```text
+Seed Steps - De (BIP39) Entropia a la Direccion
+==================================================
+1. Resumen
+   Entropia (hex):      00000000000000000000000000000000
+   Bits entropia:       128
+   Numero de palabras:  12
+   Mnemonic:            abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
 ```
 
-Desde HITO 11.4, este wizard es GUIADO por fases con validacion y confirmacion S/N entre pasos:
+## Que es Seed Steps
 
-- Etapa 1: origen (`entropia automatica` / `entropia manual` / `mnemotecnica manual`).
-- Etapa 2: passphrase (vacia permitida).
-- Etapa 3: red (`mainnet`/`testnet`).
-- Etapa 4: ruta HD (default sugerida por red o manual).
-- Etapa 5: derivacion de direccion + resumen final.
-- Al cerrar cada etapa: `Continuar al siguiente paso? (S/N)`.
-- Si respondes `N`: puedes `[C]ancelar flujo` o `[E]ditar` esa etapa y reintentar.
+Seed Steps es una CLI educativa para entender y auditar mentalmente el pipeline criptografico completo de una wallet HD moderna, desde la fuente de entropia hasta la direccion final de recepcion.
 
-Homogeneizacion HITO 11.4 (pipeline completo fase por fase):
+Incluye trazabilidad paso a paso de:
 
-- Se conserva intacta la fase BIP39 restaurada en 11.2.1 cuando el origen es entropia.
-- Luego el wizard recorre TODO el pipeline con el mismo patron didactico (pedir input en la fase y mostrar resultado en la misma fase):
-  - Fase B: Seed BIP39 (entrada: mnemonic+passphrase, operacion: PBKDF2, salida: seed completa en wizard).
-  - Fase C: Master BIP32 (entrada: seed, operacion: HMAC-SHA512, salida: I/IL/IR + xprv/xpub completos y explicados).
-  - Fase D: Ruta HD (entrada: ruta, operacion: derivacion nivel por nivel, salida: nodo derivado).
-  - Fase E: Direccion (entrada: pubkey/red, operacion: HASH160+witness+bech32, salida: direccion final).
-  - Fase F: Resumen final (inputs usados + outputs clave + advertencia).
-- Entre cada fase se mantiene `Continuar al siguiente paso? (S/N)` con opcion de cancelar o editar/reintentar.
+- BIP39: `entropia -> checksum -> bloques de 11 bits -> mnemotecnica`.
+- Seed BIP39: `PBKDF2-HMAC-SHA512` con 2048 iteraciones.
+- BIP32: nodo maestro (`xprv`/`xpub`) y derivacion por ruta.
+- BIP84: flujo orientado a direcciones SegWit nativas.
+- P2WPKH/Bech32: direccion final en `mainnet` o `testnet`.
 
-Nota UX del wizard: por solicitud del usuario, en modo interactivo se prioriza visibilidad completa de passphrase/seed/I/IL/IR/xprv/hash160 para aprendizaje. La politica segura por defecto permanece para `--full-journey`, `--tui` y modo no interactivo.
+## Que NO es
 
-Correccion 11.2.1 (didactica BIP39 restaurada):
+- NO es una wallet.
+- NO firma transacciones.
+- NO reemplaza hardware wallets ni software de custodia.
+- NO debe usarse con semillas reales ni fondos reales.
 
-- Si eliges origen por entropia (auto/manual), el wizard vuelve a mostrar la fase BIP39 completa por subpasos:
-  `Entropia -> Checksum -> Bits combinados -> Bloques de 11 bits/Indices -> Mnemotecnica`.
-- Cada subpaso BIP39 tambien pide confirmacion S/N para continuar.
-- Si eliges mnemotecnica manual, el wizard explica explicitamente que no puede reconstruir de forma fiable la entropia/checksum/bloques originales desde solo esa entrada.
+## Mapa visual del flujo
 
-Alias equivalente:
+```text
+[A] ENTROPIA
+    |
+    v
+[B] BIP39
+    - checksum = SHA256(entropia)[0:ENT/32]
+    - (ENT + CS) / 11 -> indices -> palabras
+    |
+    v
+[C] SEED BIP39
+    - seed = PBKDF2-HMAC-SHA512(mnemonic, "mnemonic" + passphrase, 2048)
+    |
+    v
+[D] BIP32/BIP84
+    - I = HMAC-SHA512("Bitcoin seed", seed)
+    - IL = master private key, IR = chain code
+    - path (ej: m/84'/0'/0'/0/0)
+    |
+    v
+[E] DIRECCION FINAL
+    - P2WPKH/Bech32 (mainnet o testnet)
+```
+
+## Requisitos
+
+- Python `3.11` o superior.
+- Terminal con soporte UTF-8.
+- `pip` disponible en el entorno.
+
+## Instalacion
+
+### 1) Clonar repositorio
 
 ```bash
+git clone https://github.com/SvenS110/Seed-Steps.git
+cd Seed-Steps
+```
+
+### 2) Crear entorno e instalar (por sistema)
+
+#### Linux
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+
+seed-steps --wizard
+
+```
+
+#### macOS
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+
+seed-steps --wizard
+
+```
+
+#### WSL (Ubuntu/Debian)
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv git
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+
+seed-steps --wizard
+
+```
+
+#### Windows PowerShell
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+py -m pip install --upgrade pip
+py -m pip install -e ".[dev]"
+
+seed-steps --wizard
+
+```
+
+Si PowerShell bloquea la activación del entorno virtual, ejecuta:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+```
+
+Después repite:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+
+```
+
+#### Windows CMD
+
+```bat
+py -m venv .venv
+.venv\Scripts\activate.bat
+
+py -m pip install --upgrade pip
+py -m pip install -e ".[dev]"
+
+seed-steps --wizard
+
+```
+
+## Uso rapido con ejemplos reales
+
+```bash
+# 1) Flujo BIP39 detallado por defecto (entropia automatica de 128 bits)
+seed-steps
+
+# 2) Flujo BIP39 compacto
+seed-steps --compact
+
+# 3) Wizard interactivo
+seed-steps --wizard
+
+# 4) Pipeline completo: BIP39 -> seed -> BIP32 -> direccion
+seed-steps --full-journey --path "m/84'/0'/0'/0/0" --network mainnet
+
+# 5) Derivar seed y nodo maestro desde mnemotecnica explicita
+seed-steps --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --derive-seed --derive-bip32
+```
+
+## Ejemplo deterministico (entropia cero)
+
+Comando:
+
+```bash
+seed-steps --entropy 00000000000000000000000000000000 --compact
+```
+
+Mnemonic esperada:
+
+```text
+abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+```
+
+## Opciones principales (flags reales)
+
+| Flag                        | Tipo   | Descripcion                                          |
+| --------------------------- | ------ | ---------------------------------------------------- |
+| `--entropy`                 | `str`  | Entropia hex (`128/160/192/224/256` bits).           |
+| `--compact`                 | switch | Salida compacta del flujo BIP39.                     |
+| `--tui`                     | switch | Vista educativa por paneles (read-only).             |
+| `--interactive`, `--wizard` | switch | Inicia asistente interactivo.                        |
+| `--no-pause`                | switch | En wizard, desactiva pausas entre pasos.             |
+| `--no-color`                | switch | Desactiva ANSI en toda la salida.                    |
+| `--mnemonic`                | `str`  | Mnemotecnica explicita de entrada.                   |
+| `--passphrase`              | `str`  | Passphrase BIP39 opcional.                           |
+| `--derive-seed`             | switch | Deriva seed BIP39.                                   |
+| `--derive-bip32`            | switch | Deriva master key BIP32.                             |
+| `--path`                    | `str`  | Ruta HD (ej. `m/84'/0'/0'/0/0`).                     |
+| `--path-steps`              | switch | Muestra derivacion por nivel para la ruta.           |
+| `--network`                 | enum   | Red: `mainnet` o `testnet`.                          |
+| `--full-journey`            | switch | Ejecuta flujo E2E completo.                          |
+| `--compare-passphrase`      | `str`  | Compara passphrase vacia vs valor dado.              |
+| `--compare-path`            | `str`  | Compara ruta principal vs alternativa.               |
+| `--show-secrets`            | switch | Muestra secretos completos (RIESGO ALTO).            |
+| `--no-secrets`              | switch | Fuerza redaccion de secretos.                        |
+| `--summary-raw`             | switch | En wizard, agrega bloque final `key=value` sin ANSI. |
+
+## Colores semanticos y `NO_COLOR`
+
+- Entropía: cian.
+- Checksum: rosa / magenta claro.
+- Seed BIP39: amarillo brillante.
+- Palabras de mnemonic: naranja.
+- Passphrase: magenta.
+- IL: azul.
+- IR / chain code: morado.
+- xprv: rojo.
+- xpub: turquesa.
+- Dirección final: blanco/brillante en el resumen, verde/brillante en vistas pedagógicas si aplica.
+
+Desactivacion de color:
+
+- Cross-platform: `--no-color`.
+- Tambien soporta variable de entorno `NO_COLOR`.
+
+Ejemplos por sistema:
+
+```bash
+# Linux/macOS/WSL
+NO_COLOR=1 seed-steps --wizard
+```
+
+```powershell
+# PowerShell
+$env:NO_COLOR = "1"
 seed-steps --wizard
 ```
 
-Ejecucion como modulo (equivalente):
-
-```bash
-python -m seed_steps --entropy 00000000000000000000000000000000
+```bat
+:: CMD
+set NO_COLOR=1
+seed-steps --wizard
 ```
 
-Derivar seed desde mnemotecnica explicita:
+## Fases del wizard (A-F) con fórmulas
 
-```bash
-seed-steps --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --passphrase TREZOR
+### A) Entropía
+
+La entropía es la fuente inicial de aleatoriedad. BIP39 acepta longitudes concretas:
+
+```text
+ENT ∈ {128, 160, 192, 224, 256}
 ```
 
-Derivar seed usando la mnemotecnica generada en el flujo normal:
+### B) BIP39: checksum, bloques e índices
 
-```bash
-seed-steps --entropy 00000000000000000000000000000000 --derive-seed
+BIP39 calcula un checksum desde `SHA256(entropía)` y lo añade al final de los bits de entropía.
+
+```text
+CS = ENT / 32
+checksum = first_CS_bits(SHA256(entropy))
+entropy_plus_checksum = entropy_bits + checksum_bits
+word_count = (ENT + CS) / 11
+index = int(block_11_bits, 2)
+word = wordlist[index]
 ```
 
-Derivar master node BIP32 (xprv/xpub) desde seed disponible:
+### C) Seed BIP39
 
-```bash
-seed-steps --entropy 00000000000000000000000000000000 --derive-bip32
+La mnemonic no se usa directamente como seed. Primero se normaliza y después se introduce en PBKDF2-HMAC-SHA512.
+
+```text
+password = NFKD(mnemonic)
+salt = "mnemonic" + NFKD(passphrase)
+seed = PBKDF2-HMAC-SHA512(password, salt, iterations=2048, dklen=64)
 ```
 
-Revelar secretos completos (SOLO laboratorio aislado):
+### D) BIP32
 
-```bash
-seed-steps --entropy 00000000000000000000000000000000 --derive-bip32 --show-secrets
+La seed BIP39 alimenta el nodo maestro BIP32. La cadena `"Bitcoin seed"` es una constante ASCII definida por BIP32, no la seed del usuario.
+
+```text
+I = HMAC-SHA512(key="Bitcoin seed", data=seed)
+IL = I[0:32]
+IR = I[32:64]
+
+master_private_key = parse256(IL)
+master_chain_code = IR
 ```
 
-Forzar redaccion aunque alguien agregue `--show-secrets`:
+### E) BIP84
 
-```bash
-seed-steps --entropy 00000000000000000000000000000000 --derive-bip32 --show-secrets --no-secrets
+En BIP84, la ruta típica para la primera dirección SegWit nativa de Bitcoin mainnet es:
+
+```text
+m/84'/0'/0'/0/0
+
+84' = purpose BIP84
+0'  = coin type Bitcoin mainnet
+0'  = account 0
+0   = external chain
+0   = address index 0
+
+hardened_index = index + 2^31
 ```
 
-Derivar master node BIP32 desde mnemotecnica explicita:
+### F) Dirección P2WPKH/Bech32
 
-```bash
-seed-steps --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --passphrase TREZOR --derive-bip32
+La clave pública comprimida del nodo derivado se transforma en una dirección SegWit nativa:
+
+```text
+hash160 = RIPEMD160(SHA256(pubkey_compressed))
+witness_version = 0
+witness_program = hash160
+address = bech32_encode(hrp, witness_version, witness_program)
+
 ```
 
-Modo completo E2E (entropia -> direccion P2WPKH):
+## Resumen plano con `--summary-raw`
+
+Cuando usas wizard, puedes agregar al final un bloque plano sin ANSI para parsing o logging controlado:
 
 ```bash
-seed-steps --full-journey --entropy 00000000000000000000000000000000 --path "m/84'/0'/0'/0/0"
+seed-steps --wizard --summary-raw --no-color
 ```
 
-Modo completo con mnemotecnica explicita + passphrase:
-
-```bash
-seed-steps --full-journey --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --passphrase TREZOR
-```
-
-Modo TUI educativa read-only (pipeline completo por paneles):
-
-```bash
-seed-steps --tui --entropy 00000000000000000000000000000000 --path "m/84'/0'/0'/0/0"
-```
-
-Modo TUI con secretos visibles (SOLO laboratorio aislado):
-
-```bash
-seed-steps --tui --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --passphrase TREZOR --show-secrets
-```
-
-Comparador pedagogico de passphrase (vacia vs valor):
-
-```bash
-seed-steps --full-journey --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --compare-passphrase TREZOR --path "m/84'/0'/0'/0/0"
-```
-
-Comparador pedagogico de ruta (ruta A vs ruta B):
-
-```bash
-seed-steps --full-journey --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --path "m/84'/0'/0'/0/0" --compare-path "m/84'/0'/0'/0/1"
-```
-
-### Salida educativa (modo detallado por defecto)
-
-La CLI organiza la explicacion en 5 secciones numeradas (6 cuando se deriva seed):
-
-1. Entropia
-2. Checksum
-3. Bits combinados
-4. Indices
-5. Mnemotecnica
-6. Seed BIP39 (opcional)
-
-Cada seccion incluye una linea de "Por que" para contexto pedagogico, metricas clave de bits y una tabla por palabra con posicion, bloque de 11 bits, indice y palabra final.
-
-En `--full-journey`, la narrativa incluye para cada etapa:
-
-- Que es
-- Por que importa
-- Que se rompe si cambia
-
-Y cierra con un resumen ejecutivo (red, ruta, mnemotecnica usada, resumen de seed, xpub derivada y direccion final) y advertencia visible:
-
-`ADVERTENCIA: EDUCATIVO, NO CUSTODIA REAL`
-
-## Tests
+## Ejecutar tests
 
 ```bash
 pytest
 ```
 
-Actualizar snapshots/golden de salida CLI (solo cuando el cambio de copy/estructura sea INTENCIONAL):
+## Ejecutar sin instalar comando
 
 ```bash
-UPDATE_GOLDENS=1 pytest tests/test_cli.py
+python -m seed_steps --wizard
 ```
 
-## Contrato de errores CLI
+## Desactivar venv
 
-- Los errores se imprimen en `stderr` con plantilla uniforme:
-  `ERROR <TIPO>: <causa>. Accion sugerida: <guia>.`
-- Codigos de salida:
-  - `0`: ejecucion exitosa
-  - `2`: error de entrada (`--entropy`)
-  - `3`: error operativo o de configuracion (wordlist)
-  - `4`: error de dominio BIP39
+```bash
+deactivate
+```
 
-## Nota sobre wordlist
+## Solucion de problemas
 
-La wordlist BIP39 inglesa se carga desde `seed_steps/data/english.txt` (empaquetada con el proyecto) y debe contener exactamente 2048 palabras.
+### `seed-steps: command not found`
 
-## Advertencia de seguridad
+- Activa el entorno virtual.
+- Reinstala en editable: `python -m pip install -e ".[dev]"`.
 
-ESTA HERRAMIENTA ES SOLO EDUCATIVA. NO USES SEMILLAS REALES NI FONDOS REALES.
+### `ERROR ENTRADA` con `--entropy`
 
-Desde HITO 10, la salida CLI aplica POLITICA SEGURA POR DEFECTO:
+- Debe ser hexadecimal valido.
+- Longitudes permitidas: `32/40/48/56/64` caracteres hex.
 
-- Seed BIP39 completa, `I` HMAC BIP32, private keys (master/derivadas), `xprv`, chain code y material derivable sensible se REDACTAN en stdout.
-- Formato de redaccion: prefijo+suffix + huella `sha256` corta para comparacion pedagogica sin exponer el secreto completo.
-- `--show-secrets` habilita exposicion completa y emite advertencia visible en pantalla.
-- `--no-secrets` tiene prioridad sobre `--show-secrets` (fail-safe).
+### Error de wordlist BIP39
 
-`xpub` y direccion final se muestran por defecto porque son artefactos de observacion/recepcion (NO de firma) y son necesarios para conservar el valor didactico del flujo.
+- Verifica `seed_steps/data/english.txt` en la instalacion.
+- Debe tener exactamente `2048` palabras no vacias.
 
-RIESGO OPERATIVO: si usas `--show-secrets`, asume que terminal, capturas, logs del CI e historial del shell pueden persistir secretos. Trata esa salida como MATERIAL CUSTODIAL.
+### Direccion final inesperada
+
+- Verifica siempre: `mnemonic`, `passphrase`, `network`, `path`.
+- Si cambia uno, cambia TODO el resultado.
+
+### Colores ANSI ilegibles
+
+- Usa `--no-color` o define `NO_COLOR`.
+
+## Seguridad
+
+ESTA HERRAMIENTA ES EDUCATIVA. NO ES PARA CUSTODIA REAL.
+
+- Usa datos de laboratorio, nunca secretos reales.
+- Una semilla que aparece en pantalla debe considerarse comprometida. Seed Steps enseña el proceso; no custodia valor.
+- Evita terminales compartidas, sesiones grabadas e historiales persistentes.
+- `--show-secrets` solo para analisis en entorno aislado y desechable.
+- Si dudas, fuerza `--no-secrets`.
+
+## Compatibilidad
+
+| Plataforma         |         Estado | Notas                                  |
+| ------------------ | -------------: | -------------------------------------- |
+| Linux              |      Soportado | Recomendado                            |
+| WSL                |      Soportado | Recomendado en Windows                 |
+| macOS              |      Soportado | Python 3.11+                           |
+| Windows PowerShell |      Soportado | Windows Terminal recomendado           |
+| Windows CMD        |      Soportado | Usar `activate.bat`                    |
+| Git Bash           | No prioritario | Puede funcionar, no objetivo principal |
+
+## Estructura del proyecto
+
+```text
+seed-steps-python/
+├── pyproject.toml
+├── README.md
+├── seed_steps/
+│   ├── __main__.py
+│   ├── cli.py
+│   ├── bip39.py
+│   ├── seed.py
+│   ├── bip32.py
+│   ├── bech32.py
+│   ├── entropy.py
+│   ├── terminal_style.py
+│   └── data/
+│       └── english.txt
+└── tests/
+    ├── test_cli.py
+    ├── test_bip39.py
+    ├── test_seed.py
+    ├── test_bip32.py
+    └── test_bech32.py
+```
+
+## Estado del proyecto
+
+Proyecto funcional para aprendizaje guiado del flujo BIP39/BIP32/BIP84 en terminal, con cobertura de tests y foco en claridad pedagogica.
+
+## Roadmap breve
+
+- Mejorar exportes de resumen para integracion con herramientas externas.
+- Agregar mas escenarios comparativos en modo `--full-journey`.
+- Incrementar ejemplos documentados para rutas y redes.
+
+## Contribuir
+
+1. Crea una rama de trabajo.
+2. Instala dependencias de desarrollo.
+3. Ejecuta `pytest` antes de abrir PR.
+4. Describe claramente el objetivo educativo del cambio.
+
+## Licencia
+
+Este proyecto se publica bajo licencia MIT. Consulta el archivo [LICENSE](LICENSE).
+
+Seed Steps es una herramienta educativa. La licencia permite usar, estudiar,
+modificar y redistribuir el código, pero el software se ofrece sin garantías.
