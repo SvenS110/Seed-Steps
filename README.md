@@ -77,10 +77,58 @@ Derivar master node BIP32 (xprv/xpub) desde seed disponible:
 seed-steps --entropy 00000000000000000000000000000000 --derive-bip32
 ```
 
+Revelar secretos completos (SOLO laboratorio aislado):
+
+```bash
+seed-steps --entropy 00000000000000000000000000000000 --derive-bip32 --show-secrets
+```
+
+Forzar redaccion aunque alguien agregue `--show-secrets`:
+
+```bash
+seed-steps --entropy 00000000000000000000000000000000 --derive-bip32 --show-secrets --no-secrets
+```
+
 Derivar master node BIP32 desde mnemotecnica explicita:
 
 ```bash
 seed-steps --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --passphrase TREZOR --derive-bip32
+```
+
+Modo completo E2E (entropia -> direccion P2WPKH):
+
+```bash
+seed-steps --full-journey --entropy 00000000000000000000000000000000 --path "m/84'/0'/0'/0/0"
+```
+
+Modo completo con mnemotecnica explicita + passphrase:
+
+```bash
+seed-steps --full-journey --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --passphrase TREZOR
+```
+
+Modo TUI educativa read-only (pipeline completo por paneles):
+
+```bash
+seed-steps --tui --entropy 00000000000000000000000000000000 --path "m/84'/0'/0'/0/0"
+```
+
+Modo TUI con secretos visibles (SOLO laboratorio aislado):
+
+```bash
+seed-steps --tui --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --passphrase TREZOR --show-secrets
+```
+
+Comparador pedagogico de passphrase (vacia vs valor):
+
+```bash
+seed-steps --full-journey --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --compare-passphrase TREZOR --path "m/84'/0'/0'/0/0"
+```
+
+Comparador pedagogico de ruta (ruta A vs ruta B):
+
+```bash
+seed-steps --full-journey --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --path "m/84'/0'/0'/0/0" --compare-path "m/84'/0'/0'/0/1"
 ```
 
 ### Salida educativa (modo detallado por defecto)
@@ -95,6 +143,16 @@ La CLI organiza la explicacion en 5 secciones numeradas (6 cuando se deriva seed
 6. Seed BIP39 (opcional)
 
 Cada seccion incluye una linea de "Por que" para contexto pedagogico, metricas clave de bits y una tabla por palabra con posicion, bloque de 11 bits, indice y palabra final.
+
+En `--full-journey`, la narrativa incluye para cada etapa:
+
+- Que es
+- Por que importa
+- Que se rompe si cambia
+
+Y cierra con un resumen ejecutivo (red, ruta, mnemotecnica usada, resumen de seed, xpub derivada y direccion final) y advertencia visible:
+
+`ADVERTENCIA: EDUCATIVO, NO CUSTODIA REAL`
 
 ## Tests
 
@@ -125,3 +183,14 @@ La wordlist BIP39 inglesa se carga desde `seed_steps/data/english.txt` (empaquet
 ## Advertencia de seguridad
 
 ESTA HERRAMIENTA ES SOLO EDUCATIVA. NO USES SEMILLAS REALES NI FONDOS REALES.
+
+Desde HITO 10, la salida CLI aplica POLITICA SEGURA POR DEFECTO:
+
+- Seed BIP39 completa, `I` HMAC BIP32, private keys (master/derivadas), `xprv`, chain code y material derivable sensible se REDACTAN en stdout.
+- Formato de redaccion: prefijo+suffix + huella `sha256` corta para comparacion pedagogica sin exponer el secreto completo.
+- `--show-secrets` habilita exposicion completa y emite advertencia visible en pantalla.
+- `--no-secrets` tiene prioridad sobre `--show-secrets` (fail-safe).
+
+`xpub` y direccion final se muestran por defecto porque son artefactos de observacion/recepcion (NO de firma) y son necesarios para conservar el valor didactico del flujo.
+
+RIESGO OPERATIVO: si usas `--show-secrets`, asume que terminal, capturas, logs del CI e historial del shell pueden persistir secretos. Trata esa salida como MATERIAL CUSTODIAL.

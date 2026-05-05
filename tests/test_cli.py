@@ -256,10 +256,8 @@ def test_cli_derives_seed_from_explicit_mnemonic(capsys, monkeypatch) -> None:
     assert captured.err == ""
     assert "6. Seed BIP39" in captured.out
     assert "Salt efectivo:       mnemonicTREZOR" in captured.out
-    assert (
-        "Seed (hex, 64 bytes): c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e5349553"
-        in captured.out
-    )
+    assert "Seed (hex, 64 bytes): c55257c3..." in captured.out
+    assert "[sha256:" in captured.out
 
 
 def test_cli_derives_seed_from_generated_mnemonic(capsys, monkeypatch) -> None:
@@ -309,7 +307,8 @@ def test_cli_derives_bip32_from_explicit_mnemonic(capsys, monkeypatch) -> None:
     assert captured.err == ""
     assert "7. Master node BIP32" in captured.out
     assert "I = HMAC-SHA512:" in captured.out
-    assert "xprv (mainnet):      xprv9s21ZrQH143K3" in captured.out
+    assert "xprv (mainnet):      xprv9s21..." in captured.out
+    assert "[sha256:" in captured.out
     assert "xpub (mainnet):      xpub661MyMwAqRbcG" in captured.out
 
 
@@ -421,3 +420,280 @@ def test_cli_fails_when_bip32_path_is_invalid(capsys, monkeypatch) -> None:
     assert match is not None
     assert match.group("type") == "DOMINIO BIP32"
     assert "Ruta BIP32 invalida" in captured.err
+
+
+def test_cli_full_journey_entropy_to_p2wpkh_has_narrative_and_summary(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--full-journey",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--path",
+            "m/84'/0'/0'/0/0",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Modo: Full Journey E2E (educativo guiado)" in captured.out
+    assert "1. Entropia -> Mnemotecnica (BIP39)" in captured.out
+    assert "2. Mnemotecnica -> Seed (BIP39 PBKDF2)" in captured.out
+    assert "3. Seed -> Master BIP32" in captured.out
+    assert "4. Master -> Ruta derivada" in captured.out
+    assert "5. Ruta derivada -> Direccion P2WPKH" in captured.out
+    assert "Resumen ejecutivo" in captured.out
+    assert "ADVERTENCIA: EDUCATIVO, NO CUSTODIA REAL" in captured.out
+    assert "xpub derivada:" in captured.out
+    assert "Direccion final:     bc1" in captured.out
+
+
+def test_cli_full_journey_with_explicit_mnemonic_and_passphrase(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--full-journey",
+            "--mnemonic",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--passphrase",
+            "TREZOR",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "1. Entrada mnemotecnica explicita" in captured.out
+    assert "Passphrase usada:    TREZOR" in captured.out
+    assert "Ruta final:          m/84'/0'/0'/0/0" in captured.out
+
+
+def test_cli_full_journey_passphrase_comparator_shows_semantic_differences(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--full-journey",
+            "--mnemonic",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--compare-passphrase",
+            "TREZOR",
+            "--path",
+            "m/84'/0'/0'/0/0",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Comparador pedagogico: passphrase vacia vs valor" in captured.out
+    assert "Caso A (vacia) seed:" in captured.out
+    assert "Caso B ('TREZOR') seed:" in captured.out
+    assert "[sha256:" in captured.out
+    assert "A xprv:" in captured.out
+    assert "B xprv:" in captured.out
+    assert "A xpub:" in captured.out
+    assert "B xpub:" in captured.out
+    assert "A direccion:" in captured.out
+    assert "B direccion:" in captured.out
+
+
+def test_cli_full_journey_path_comparator_shows_semantic_differences(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--full-journey",
+            "--mnemonic",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--path",
+            "m/84'/0'/0'/0/0",
+            "--compare-path",
+            "m/84'/0'/0'/0/1",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Comparador pedagogico: ruta A vs ruta B" in captured.out
+    assert "Ruta A:              m/84'/0'/0'/0/0" in captured.out
+    assert "Ruta B:              m/84'/0'/0'/0/1" in captured.out
+    assert "A xprv:" in captured.out
+    assert "B xprv:" in captured.out
+    assert "A xpub:" in captured.out
+    assert "B xpub:" in captured.out
+    assert "A direccion:" in captured.out
+    assert "B direccion:" in captured.out
+
+
+def test_cli_redacts_sensitive_material_by_default(capsys, monkeypatch) -> None:
+    mnemonic = (
+        "abandon abandon abandon abandon abandon abandon abandon abandon "
+        "abandon abandon abandon about"
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--mnemonic",
+            mnemonic,
+            "--passphrase",
+            "TREZOR",
+            "--derive-bip32",
+            "--path",
+            "m/84'/0'/0'/0/0",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "c55257c360c07c72029aebc1b53c05ed" not in captured.out
+    assert "cbedc75b0d6412c8479" not in captured.out
+    assert "xprv9s21ZrQH143K3" not in captured.out
+    assert "[sha256:" in captured.out
+
+
+def test_cli_reveals_sensitive_material_with_show_secrets(capsys, monkeypatch) -> None:
+    mnemonic = (
+        "abandon abandon abandon abandon abandon abandon abandon abandon "
+        "abandon abandon abandon about"
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--mnemonic",
+            mnemonic,
+            "--passphrase",
+            "TREZOR",
+            "--derive-bip32",
+            "--show-secrets",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "ADVERTENCIA DE SEGURIDAD: --show-secrets" in captured.out
+    assert (
+        "Seed (hex, 64 bytes): c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e5349553"
+        in captured.out
+    )
+    assert "xprv (mainnet):      xprv9s21ZrQH143K3" in captured.out
+
+
+def test_cli_no_secrets_has_priority_over_show_secrets(capsys, monkeypatch) -> None:
+    mnemonic = (
+        "abandon abandon abandon abandon abandon abandon abandon abandon "
+        "abandon abandon abandon about"
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--mnemonic",
+            mnemonic,
+            "--passphrase",
+            "TREZOR",
+            "--derive-bip32",
+            "--show-secrets",
+            "--no-secrets",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "ADVERTENCIA DE SEGURIDAD: --show-secrets" not in captured.out
+    assert "xprv9s21ZrQH143K3" not in captured.out
+    assert "[sha256:" in captured.out
+
+
+def test_cli_tui_smoke_has_three_panels_and_summary(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tui",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--path",
+            "m/84'/0'/0'/0/0",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Seed Steps - TUI Educativa (READ-ONLY)" in captured.out
+    assert "[Panel 1/3] Inputs usados" in captured.out
+    assert "[Panel 2/3] Resultado por etapa" in captured.out
+    assert "[Panel 3/3] Resumen ejecutivo" in captured.out
+    assert "- BIP39 seed:" in captured.out
+    assert "[sha256:" in captured.out
+    assert "- P2WPKH address:  bc1" in captured.out
+
+
+def test_cli_tui_show_secrets_reuses_security_semantics(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tui",
+            "--mnemonic",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--passphrase",
+            "TREZOR",
+            "--show-secrets",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "ADVERTENCIA DE SEGURIDAD: --show-secrets" in captured.out
+    assert (
+        "- BIP39 seed:      c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e5349553"
+        in captured.out
+    )
+    assert "- BIP32 master:    xprv=xprv9s21ZrQH143K3" in captured.out

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 from importlib.resources import as_file, files
 from pathlib import Path
@@ -25,6 +26,28 @@ def _error_message(error_type: str, cause: str, guide: str) -> str:
     return f"ERROR {error_type}: {cause}. Accion sugerida: {guide}."
 
 
+def _mask_sensitive(value: str) -> str:
+    if not value:
+        return "(vacio)"
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+    if len(value) <= 16:
+        return f"{value[:4]}...{value[-4:]} [sha256:{digest}]"
+    return f"{value[:8]}...{value[-8:]} [sha256:{digest}]"
+
+
+def _display_sensitive(value: str, *, show_secrets: bool) -> str:
+    if show_secrets:
+        return value
+    return _mask_sensitive(value)
+
+
+def _print_secrets_warning() -> None:
+    print(
+        "ADVERTENCIA DE SEGURIDAD: --show-secrets expone material sensible en terminal, logs e historial."
+    )
+    print("NO uses semillas o claves reales en este modo.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="seed-steps",
@@ -39,6 +62,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--compact",
         action="store_true",
         help="Compact output with only key metrics and final mnemonic.",
+    )
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Renderiza una vista educativa por paneles (read-only) del pipeline completo.",
     )
     parser.add_argument(
         "--interactive",
@@ -84,6 +112,31 @@ def build_parser() -> argparse.ArgumentParser:
         default="mainnet",
         choices=["mainnet", "testnet"],
         help="Red para direccion final (mainnet|testnet).",
+    )
+    parser.add_argument(
+        "--full-journey",
+        action="store_true",
+        help="Ejecuta flujo E2E completo: entropia/mnemonic -> seed -> BIP32 -> ruta -> direccion.",
+    )
+    parser.add_argument(
+        "--compare-passphrase",
+        type=str,
+        help="En modo completo, compara passphrase vacia vs este valor.",
+    )
+    parser.add_argument(
+        "--compare-path",
+        type=str,
+        help="En modo completo, compara ruta principal (--path) contra esta ruta alternativa.",
+    )
+    parser.add_argument(
+        "--show-secrets",
+        action="store_true",
+        help="Muestra secretos completos (seed/xprv/private key/chain code). Riesgoso.",
+    )
+    parser.add_argument(
+        "--no-secrets",
+        action="store_true",
+        help="Fuerza redaccion de secretos. Tiene prioridad sobre --show-secrets.",
     )
     return parser
 
@@ -220,7 +273,9 @@ def _print_compact_breakdown(breakdown) -> None:
     print(f"   Mnemonic:            {breakdown.mnemonic}")
 
 
-def _print_seed_derivation(mnemonic: str, passphrase: str) -> None:
+def _print_seed_derivation(
+    mnemonic: str, passphrase: str, *, show_secrets: bool
+) -> None:
     seed_bytes = derive_bip39_seed(mnemonic, passphrase)
     salt = build_bip39_seed_salt(passphrase)
 
@@ -235,27 +290,41 @@ def _print_seed_derivation(mnemonic: str, passphrase: str) -> None:
     print("   Salt PBKDF2:         'mnemonic' + passphrase")
     print(f"   Salt efectivo:       {salt}")
     print("   KDF:                 PBKDF2-HMAC-SHA512, iteraciones=2048")
-    print(f"   Seed (hex, 64 bytes): {seed_bytes.hex()}")
+    print(
+        f"   Seed (hex, 64 bytes): {_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)}"
+    )
 
 
-def _print_bip32_derivation(seed_bytes: bytes) -> None:
+def _print_bip32_derivation(seed_bytes: bytes, *, show_secrets: bool) -> None:
     master = derive_bip32_master_node(seed_bytes)
     print()
     print("7. Master node BIP32")
     print(
         "   Por que: BIP32 separa secreto (master key) y ruta de derivacion (chain code)."
     )
-    print(f"   I = HMAC-SHA512:     {master.hmac_i.hex()}")
-    print(f"   IL (master key):     {master.master_private_key.hex()}")
-    print(f"   IR (chain code):     {master.chain_code.hex()}")
-    print(f"   Master private key:  {master.master_private_key.hex()}")
-    print(f"   Chain code:          {master.chain_code.hex()}")
-    print(f"   xprv (mainnet):      {master.xprv}")
+    print(
+        f"   I = HMAC-SHA512:     {_display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        f"   IL (master key):     {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        f"   IR (chain code):     {_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        f"   Master private key:  {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        f"   Chain code:          {_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        f"   xprv (mainnet):      {_display_sensitive(master.xprv, show_secrets=show_secrets)}"
+    )
     print(f"   xpub (mainnet):      {master.xpub}")
 
 
 def _print_bip32_path_derivation(
-    seed_bytes: bytes, path: str, show_steps: bool, network: str
+    seed_bytes: bytes, path: str, show_steps: bool, network: str, *, show_secrets: bool
 ) -> None:
     parsed = parse_bip32_path(path)
     master = derive_bip32_master_node(seed_bytes)
@@ -287,7 +356,9 @@ def _print_bip32_path_derivation(
     print(f"   Depth final:         {current.depth}")
     print(f"   Child number final:  {current.child_number}")
     print(f"   Parent fingerprint:  {current.parent_fingerprint.hex()}")
-    print(f"   xprv derivado:       {current.xprv}")
+    print(
+        f"   xprv derivado:       {_display_sensitive(current.xprv, show_secrets=show_secrets)}"
+    )
     print(f"   xpub derivado:       {current.xpub}")
 
     p2wpkh = derive_p2wpkh_address_from_node(current, network)
@@ -295,12 +366,284 @@ def _print_bip32_path_derivation(
     print("9. Direccion Bitcoin P2WPKH (Bech32)")
     print("   Por que: Convierte la pubkey derivada en direccion SegWit v0 utilizable.")
     print(f"   Red:                 {network} ({p2wpkh.hrp})")
-    print(f"   Pubkey comprimida:   {p2wpkh.compressed_pubkey.hex()}")
-    print(f"   HASH160(pubkey):     {p2wpkh.hash160.hex()}")
+    print(
+        f"   Pubkey comprimida:   {_display_sensitive(p2wpkh.compressed_pubkey.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        f"   HASH160(pubkey):     {_display_sensitive(p2wpkh.hash160.hex(), show_secrets=show_secrets)}"
+    )
     print(
         f"   Witness program:     OP_{p2wpkh.witness_version} {p2wpkh.witness_program.hex()}"
     )
     print(f"   Direccion final:     {p2wpkh.address}")
+
+
+def _default_path_for_network(network: str) -> str:
+    if network == "testnet":
+        return "m/84'/1'/0'/0/0"
+    return "m/84'/0'/0'/0/0"
+
+
+def _derive_path_artifacts(
+    seed_bytes: bytes, path: str, network: str
+) -> dict[str, str]:
+    master = derive_bip32_master_node(seed_bytes)
+    root = derive_bip32_node_from_master(master)
+    node = derive_bip32_path_from_node(root, path)
+    addr = derive_p2wpkh_address_from_node(node, network)
+    return {
+        "path": path,
+        "xprv": node.xprv,
+        "xpub": node.xpub,
+        "address": addr.address,
+    }
+
+
+def _build_pipeline_artifacts(
+    *,
+    entropy: bytes | None,
+    mnemonic: str,
+    passphrase: str,
+    path: str,
+    network: str,
+) -> dict[str, object]:
+    seed_bytes = derive_bip39_seed(mnemonic, passphrase)
+    master = derive_bip32_master_node(seed_bytes)
+    root = derive_bip32_node_from_master(master)
+    derived = derive_bip32_path_from_node(root, path)
+    final_addr = derive_p2wpkh_address_from_node(derived, network)
+
+    entropy_hex = entropy.hex() if entropy is not None else None
+    return {
+        "entropy_hex": entropy_hex,
+        "mnemonic": mnemonic,
+        "passphrase": passphrase,
+        "seed_bytes": seed_bytes,
+        "seed_fingerprint": hashlib.sha256(seed_bytes).hexdigest(),
+        "salt": build_bip39_seed_salt(passphrase),
+        "master": master,
+        "derived": derived,
+        "final_addr": final_addr,
+        "path": path,
+        "network": network,
+    }
+
+
+def _print_tui_read_only_panels(
+    artifacts: dict[str, object], *, show_secrets: bool
+) -> int:
+    print("+--------------------------------------------------------------------+")
+    print("| Seed Steps - TUI Educativa (READ-ONLY)                             |")
+    print("+--------------------------------------------------------------------+")
+
+    entropy_hex = artifacts["entropy_hex"]
+    mnemonic = artifacts["mnemonic"]
+    passphrase = artifacts["passphrase"]
+    seed_bytes = artifacts["seed_bytes"]
+    master = artifacts["master"]
+    derived = artifacts["derived"]
+    final_addr = artifacts["final_addr"]
+    path = artifacts["path"]
+    network = artifacts["network"]
+
+    print("[Panel 1/3] Inputs usados")
+    print(
+        f"- entropy:    {entropy_hex if entropy_hex else '(no provista: entrada por --mnemonic)'}"
+    )
+    print(f"- mnemonic:   {mnemonic}")
+    print(f"- passphrase: {passphrase or '(vacia)'}")
+    print(f"- path:       {path}")
+    print(f"- network:    {network}")
+    print()
+
+    print("[Panel 2/3] Resultado por etapa")
+    print(f"- BIP39 mnemonic:  {mnemonic}")
+    print(
+        "- BIP39 seed:      "
+        f"{_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        "- BIP32 master:    "
+        f"xprv={_display_sensitive(master.xprv, show_secrets=show_secrets)} | xpub={master.xpub}"
+    )
+    print(
+        "- BIP32 ruta:      "
+        f"xprv={_display_sensitive(derived.xprv, show_secrets=show_secrets)} | xpub={derived.xpub}"
+    )
+    print(f"- P2WPKH address:  {final_addr.address}")
+    print()
+
+    print("[Panel 3/3] Resumen ejecutivo")
+    print(f"- red:             {network} ({final_addr.hrp})")
+    print(f"- ruta final:      {path}")
+    print(f"- salt PBKDF2:     {artifacts['salt']}")
+    print(f"- seed sha256:     {artifacts['seed_fingerprint']}")
+    print(f"- direccion final: {final_addr.address}")
+    print("- politica:        secreto redactado por defecto")
+    print("- advertencia:     EDUCATIVO, NO CUSTODIA REAL")
+    return 0
+
+
+def _print_full_journey(
+    *,
+    entropy: bytes | None,
+    mnemonic: str,
+    passphrase: str,
+    path: str,
+    network: str,
+    wordlist: list[str],
+    compare_passphrase: str | None,
+    compare_path: str | None,
+    show_secrets: bool,
+) -> int:
+    _print_header()
+    print("Modo: Full Journey E2E (educativo guiado)")
+    print()
+
+    if entropy is not None:
+        breakdown = build_bip39_breakdown(entropy, wordlist)
+        print("1. Entropia -> Mnemotecnica (BIP39)")
+        print("   Que es: Entropia cruda convertida a palabras mediante checksum.")
+        print(
+            "   Por que importa: La calidad de esta entropia define todo el arbol de claves."
+        )
+        print(
+            "   Que se rompe si cambia: Cambia la mnemotecnica y TODO (seed/xprv/xpub/direcciones)."
+        )
+        print(f"   Entropia (hex):      {breakdown.entropy_hex}")
+        print(f"   Checksum bits:       {breakdown.checksum_bits}")
+        print(f"   Mnemotecnica:        {breakdown.mnemonic}")
+    else:
+        breakdown = None
+        print("1. Entrada mnemotecnica explicita")
+        print(
+            "   Que es: Se recibe una mnemotecnica ya formada (no se recalcula entropia)."
+        )
+        print(
+            "   Por que importa: Permite continuar el flujo sin exponer el origen de la entropia."
+        )
+        print(
+            "   Que se rompe si cambia: Una sola palabra distinta cambia toda la seed y derivaciones."
+        )
+        print(f"   Mnemotecnica:        {mnemonic}")
+
+    artifacts = _build_pipeline_artifacts(
+        entropy=entropy,
+        mnemonic=mnemonic,
+        passphrase=passphrase,
+        path=path,
+        network=network,
+    )
+    seed_bytes = artifacts["seed_bytes"]
+    seed_fingerprint = artifacts["seed_fingerprint"]
+    master = artifacts["master"]
+    derived = artifacts["derived"]
+    final_addr = artifacts["final_addr"]
+
+    print()
+    print("2. Mnemotecnica -> Seed (BIP39 PBKDF2)")
+    print("   Que es: KDF PBKDF2-HMAC-SHA512 (2048 iteraciones) sobre mnemonic + salt.")
+    print(
+        "   Por que importa: Endurece la derivacion y soporta passphrase como factor extra."
+    )
+    print("   Que se rompe si cambia: Passphrase distinta => seed totalmente distinta.")
+    print(f"   Passphrase usada:    {passphrase or '(vacia)'}")
+    print(f"   Salt efectivo:       {build_bip39_seed_salt(passphrase)}")
+    print(
+        f"   Seed (hex, 64 bytes): {_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)}"
+    )
+
+    print()
+    print("3. Seed -> Master BIP32")
+    print("   Que es: HMAC-SHA512('Bitcoin seed', seed) para obtener IL/IR.")
+    print(
+        "   Por que importa: IL inicia el secreto maestro y IR el chain code del arbol HD."
+    )
+    print(
+        "   Que se rompe si cambia: Se altera todo el arbol de derivacion (xprv/xpub/hijos)."
+    )
+    print(
+        f"   xprv master:         {_display_sensitive(master.xprv, show_secrets=show_secrets)}"
+    )
+    print(f"   xpub master:         {master.xpub}")
+
+    print()
+    print("4. Master -> Ruta derivada")
+    print("   Que es: Aplicar la ruta HD para llegar a una clave hija concreta.")
+    print("   Por que importa: Separa cuentas/ramas y evita reutilizacion de claves.")
+    print(
+        "   Que se rompe si cambia: Ruta diferente => xprv/xpub/direccion diferentes."
+    )
+    print(f"   Ruta usada:          {path}")
+    print(
+        f"   xprv derivado:       {_display_sensitive(derived.xprv, show_secrets=show_secrets)}"
+    )
+    print(f"   xpub derivado:       {derived.xpub}")
+
+    print()
+    print("5. Ruta derivada -> Direccion P2WPKH")
+    print("   Que es: Pubkey comprimida -> HASH160 -> Bech32 SegWit v0.")
+    print("   Por que importa: Es la direccion compatible para recibir BTC.")
+    print("   Que se rompe si cambia: Pubkey/ruta/red distinta => direccion distinta.")
+    print(f"   Red:                 {network} ({final_addr.hrp})")
+    print(f"   Direccion final:     {final_addr.address}")
+
+    if compare_passphrase:
+        print()
+        print("6. Comparador pedagogico: passphrase vacia vs valor")
+        print(
+            "   Que se compara: mismo mnemonic, passphrase='' frente a passphrase personalizada."
+        )
+        empty_seed = derive_bip39_seed(mnemonic, "")
+        custom_seed = derive_bip39_seed(mnemonic, compare_passphrase)
+        empty_artifacts = _derive_path_artifacts(empty_seed, path, network)
+        custom_artifacts = _derive_path_artifacts(custom_seed, path, network)
+        print(
+            f"   Caso A (vacia) seed: {_display_sensitive(empty_seed.hex(), show_secrets=show_secrets)}"
+        )
+        print(
+            f"   Caso B ('{compare_passphrase}') seed: {_display_sensitive(custom_seed.hex(), show_secrets=show_secrets)}"
+        )
+        print(
+            f"   A xprv:              {_display_sensitive(empty_artifacts['xprv'], show_secrets=show_secrets)}"
+        )
+        print(
+            f"   B xprv:              {_display_sensitive(custom_artifacts['xprv'], show_secrets=show_secrets)}"
+        )
+        print(f"   A xpub:              {empty_artifacts['xpub']}")
+        print(f"   B xpub:              {custom_artifacts['xpub']}")
+        print(f"   A direccion:         {empty_artifacts['address']}")
+        print(f"   B direccion:         {custom_artifacts['address']}")
+
+    if compare_path:
+        print()
+        print("7. Comparador pedagogico: ruta A vs ruta B")
+        print("   Que se compara: misma seed, dos rutas HD distintas.")
+        path_a = _derive_path_artifacts(seed_bytes, path, network)
+        path_b = _derive_path_artifacts(seed_bytes, compare_path, network)
+        print(f"   Ruta A:              {path_a['path']}")
+        print(f"   Ruta B:              {path_b['path']}")
+        print(
+            f"   A xprv:              {_display_sensitive(path_a['xprv'], show_secrets=show_secrets)}"
+        )
+        print(
+            f"   B xprv:              {_display_sensitive(path_b['xprv'], show_secrets=show_secrets)}"
+        )
+        print(f"   A xpub:              {path_a['xpub']}")
+        print(f"   B xpub:              {path_b['xpub']}")
+        print(f"   A direccion:         {path_a['address']}")
+        print(f"   B direccion:         {path_b['address']}")
+
+    print()
+    print("Resumen ejecutivo")
+    print(f"   Red:                 {network}")
+    print(f"   Ruta final:          {path}")
+    print(f"   Mnemotecnica usada:  {mnemonic}")
+    print(f"   Seed resumen:        sha256={seed_fingerprint}")
+    print(f"   xpub derivada:       {derived.xpub}")
+    print(f"   Direccion final:     {final_addr.address}")
+    print("   ADVERTENCIA: EDUCATIVO, NO CUSTODIA REAL")
+    return 0
 
 
 def run() -> int:
@@ -336,16 +679,142 @@ def run() -> int:
     if args.interactive:
         return _run_interactive(wordlist)
 
+    show_secrets = args.show_secrets and not args.no_secrets
+    if show_secrets:
+        _print_secrets_warning()
+        print()
+
+    if args.tui:
+        if args.mnemonic:
+            mnemonic = args.mnemonic
+            entropy = None
+        else:
+            try:
+                entropy = (
+                    parse_entropy_hex(args.entropy)
+                    if args.entropy
+                    else generate_entropy(16)
+                )
+            except ValueError as exc:
+                print(
+                    _error_message(
+                        "ENTRADA",
+                        f"valor invalido en --entropy ({exc})",
+                        "usa un hexadecimal valido de 128/160/192/224/256 bits",
+                    ),
+                    file=sys.stderr,
+                )
+                return 2
+            try:
+                breakdown = build_bip39_breakdown(entropy, wordlist)
+            except ValueError as exc:
+                print(
+                    _error_message(
+                        "DOMINIO BIP39",
+                        f"validacion de reglas BIP39 fallida ({exc})",
+                        "revisa la entropia y la integridad de la wordlist",
+                    ),
+                    file=sys.stderr,
+                )
+                return 4
+            mnemonic = breakdown.mnemonic
+
+        tui_path = args.path or _default_path_for_network(args.network)
+        try:
+            artifacts = _build_pipeline_artifacts(
+                entropy=entropy,
+                mnemonic=mnemonic,
+                passphrase=args.passphrase,
+                path=tui_path,
+                network=args.network,
+            )
+            return _print_tui_read_only_panels(artifacts, show_secrets=show_secrets)
+        except ValueError as exc:
+            print(
+                _error_message(
+                    "DOMINIO BIP32",
+                    f"no se pudo derivar flujo TUI ({exc})",
+                    "verifica seed, ruta y red para la derivacion",
+                ),
+                file=sys.stderr,
+            )
+            return 4
+
+    if args.full_journey:
+        if args.mnemonic:
+            mnemonic = args.mnemonic
+            entropy = None
+        else:
+            try:
+                entropy = (
+                    parse_entropy_hex(args.entropy)
+                    if args.entropy
+                    else generate_entropy(16)
+                )
+            except ValueError as exc:
+                print(
+                    _error_message(
+                        "ENTRADA",
+                        f"valor invalido en --entropy ({exc})",
+                        "usa un hexadecimal valido de 128/160/192/224/256 bits",
+                    ),
+                    file=sys.stderr,
+                )
+                return 2
+            try:
+                breakdown = build_bip39_breakdown(entropy, wordlist)
+            except ValueError as exc:
+                print(
+                    _error_message(
+                        "DOMINIO BIP39",
+                        f"validacion de reglas BIP39 fallida ({exc})",
+                        "revisa la entropia y la integridad de la wordlist",
+                    ),
+                    file=sys.stderr,
+                )
+                return 4
+            mnemonic = breakdown.mnemonic
+
+        full_path = args.path or _default_path_for_network(args.network)
+        try:
+            return _print_full_journey(
+                entropy=entropy,
+                mnemonic=mnemonic,
+                passphrase=args.passphrase,
+                path=full_path,
+                network=args.network,
+                wordlist=wordlist,
+                compare_passphrase=args.compare_passphrase,
+                compare_path=args.compare_path,
+                show_secrets=show_secrets,
+            )
+        except ValueError as exc:
+            print(
+                _error_message(
+                    "DOMINIO BIP32",
+                    f"no se pudo derivar flujo completo ({exc})",
+                    "verifica seed, ruta y red para la derivacion",
+                ),
+                file=sys.stderr,
+            )
+            return 4
+
     if args.mnemonic:
         _print_header()
         seed_bytes = derive_bip39_seed(args.mnemonic, args.passphrase)
-        _print_seed_derivation(args.mnemonic, args.passphrase)
+        _print_seed_derivation(
+            args.mnemonic, args.passphrase, show_secrets=show_secrets
+        )
         if args.derive_bip32 or args.path:
             try:
-                _print_bip32_derivation(seed_bytes)
+                _print_bip32_derivation(seed_bytes, show_secrets=show_secrets)
                 if args.path:
                     _print_bip32_path_derivation(
-                        seed_bytes, args.path, args.path_steps, args.network
+                        seed_bytes,
+                        args.path,
+                        args.path_steps,
+                        args.network,
+                        show_secrets=show_secrets,
                     )
             except ValueError as exc:
                 print(
@@ -396,13 +865,19 @@ def run() -> int:
     seed_bytes = None
     if args.derive_seed or args.passphrase or args.derive_bip32 or args.path:
         seed_bytes = derive_bip39_seed(breakdown.mnemonic, args.passphrase)
-        _print_seed_derivation(breakdown.mnemonic, args.passphrase)
+        _print_seed_derivation(
+            breakdown.mnemonic, args.passphrase, show_secrets=show_secrets
+        )
     if args.derive_bip32 or args.path:
         try:
-            _print_bip32_derivation(seed_bytes)
+            _print_bip32_derivation(seed_bytes, show_secrets=show_secrets)
             if args.path:
                 _print_bip32_path_derivation(
-                    seed_bytes, args.path, args.path_steps, args.network
+                    seed_bytes,
+                    args.path,
+                    args.path_steps,
+                    args.network,
+                    show_secrets=show_secrets,
                 )
         except ValueError as exc:
             print(
