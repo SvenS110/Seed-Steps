@@ -336,3 +336,88 @@ def test_cli_derives_bip32_from_entropy_flow(capsys, monkeypatch) -> None:
     )
     assert "6. Seed BIP39" in captured.out
     assert "7. Master node BIP32" in captured.out
+
+
+def test_cli_derives_bip32_path_from_mnemonic(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--mnemonic",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--passphrase",
+            "TREZOR",
+            "--path",
+            "m/84'/0'/0'/0/0",
+            "--path-steps",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "7. Master node BIP32" in captured.out
+    assert "8. Ruta HD BIP32" in captured.out
+    assert "Ruta solicitada:     m/84'/0'/0'/0/0" in captured.out
+    assert "Pasos:" in captured.out
+    assert "xprv derivado:       xprv" in captured.out
+    assert "xpub derivado:       xpub" in captured.out
+    assert "9. Direccion Bitcoin P2WPKH (Bech32)" in captured.out
+    assert "Pubkey comprimida:" in captured.out
+    assert "HASH160(pubkey):" in captured.out
+    assert "Witness program:" in captured.out
+    assert "Direccion final:     bc1" in captured.out
+
+
+def test_cli_derives_testnet_address_from_entropy_to_path(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--path",
+            "m/84'/1'/0'/0/0",
+            "--network",
+            "testnet",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "6. Seed BIP39" in captured.out
+    assert "7. Master node BIP32" in captured.out
+    assert "8. Ruta HD BIP32" in captured.out
+    assert "9. Direccion Bitcoin P2WPKH (Bech32)" in captured.out
+    assert "Red:                 testnet (tb)" in captured.out
+    assert "Direccion final:     tb1" in captured.out
+
+
+def test_cli_fails_when_bip32_path_is_invalid(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--mnemonic",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--path",
+            "84'/0'/0'/0/0",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    match = ERROR_PATTERN.match(captured.err.strip())
+    assert match is not None
+    assert match.group("type") == "DOMINIO BIP32"
+    assert "Ruta BIP32 invalida" in captured.err

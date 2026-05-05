@@ -7,7 +7,14 @@ import sys
 from importlib.resources import as_file, files
 from pathlib import Path
 
-from seed_steps.bip32 import derive_bip32_master_node
+from seed_steps.bip32 import (
+    HARDENED_OFFSET,
+    derive_p2wpkh_address_from_node,
+    derive_bip32_master_node,
+    derive_bip32_node_from_master,
+    derive_bip32_path_from_node,
+    parse_bip32_path,
+)
 from seed_steps.bip39 import build_bip39_breakdown, load_wordlist
 from seed_steps.entropy import generate_entropy, parse_entropy_hex
 from seed_steps.format import group_binary
@@ -60,6 +67,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--derive-bip32",
         action="store_true",
         help="Deriva master key BIP32 (xprv/xpub) desde seed disponible.",
+    )
+    parser.add_argument(
+        "--path",
+        type=str,
+        help="Ruta HD BIP32 desde la master key (ej: m/84'/0'/0'/0/0).",
+    )
+    parser.add_argument(
+        "--path-steps",
+        action="store_true",
+        help="Muestra derivacion por niveles para la ruta HD indicada.",
+    )
+    parser.add_argument(
+        "--network",
+        type=str,
+        default="mainnet",
+        choices=["mainnet", "testnet"],
+        help="Red para direccion final (mainnet|testnet).",
     )
     return parser
 
@@ -230,6 +254,55 @@ def _print_bip32_derivation(seed_bytes: bytes) -> None:
     print(f"   xpub (mainnet):      {master.xpub}")
 
 
+def _print_bip32_path_derivation(
+    seed_bytes: bytes, path: str, show_steps: bool, network: str
+) -> None:
+    parsed = parse_bip32_path(path)
+    master = derive_bip32_master_node(seed_bytes)
+    current = derive_bip32_node_from_master(master)
+
+    print()
+    print("8. Ruta HD BIP32")
+    print("   Por que: Permite derivar cuentas/direcciones sin exponer la master key.")
+    print(f"   Ruta solicitada:     {path}")
+
+    if show_steps:
+        print("   Pasos:")
+        if not parsed:
+            print("   - m (sin derivacion, se mantiene nodo master)")
+        for step in parsed:
+            current = derive_bip32_path_from_node(current, f"m/{step.token}")
+            index_label = (
+                step.child_number - HARDENED_OFFSET
+                if step.hardened
+                else step.child_number
+            )
+            hardened_label = "hardened" if step.hardened else "normal"
+            print(
+                f"   - {step.token}: index={index_label}, tipo={hardened_label}, depth={current.depth}, fp_padre={current.parent_fingerprint.hex()}"
+            )
+    else:
+        current = derive_bip32_path_from_node(current, path)
+
+    print(f"   Depth final:         {current.depth}")
+    print(f"   Child number final:  {current.child_number}")
+    print(f"   Parent fingerprint:  {current.parent_fingerprint.hex()}")
+    print(f"   xprv derivado:       {current.xprv}")
+    print(f"   xpub derivado:       {current.xpub}")
+
+    p2wpkh = derive_p2wpkh_address_from_node(current, network)
+    print()
+    print("9. Direccion Bitcoin P2WPKH (Bech32)")
+    print("   Por que: Convierte la pubkey derivada en direccion SegWit v0 utilizable.")
+    print(f"   Red:                 {network} ({p2wpkh.hrp})")
+    print(f"   Pubkey comprimida:   {p2wpkh.compressed_pubkey.hex()}")
+    print(f"   HASH160(pubkey):     {p2wpkh.hash160.hex()}")
+    print(
+        f"   Witness program:     OP_{p2wpkh.witness_version} {p2wpkh.witness_program.hex()}"
+    )
+    print(f"   Direccion final:     {p2wpkh.address}")
+
+
 def run() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -267,9 +340,13 @@ def run() -> int:
         _print_header()
         seed_bytes = derive_bip39_seed(args.mnemonic, args.passphrase)
         _print_seed_derivation(args.mnemonic, args.passphrase)
-        if args.derive_bip32:
+        if args.derive_bip32 or args.path:
             try:
                 _print_bip32_derivation(seed_bytes)
+                if args.path:
+                    _print_bip32_path_derivation(
+                        seed_bytes, args.path, args.path_steps, args.network
+                    )
             except ValueError as exc:
                 print(
                     _error_message(
@@ -317,12 +394,16 @@ def run() -> int:
         _print_detailed_breakdown(breakdown)
 
     seed_bytes = None
-    if args.derive_seed or args.passphrase or args.derive_bip32:
+    if args.derive_seed or args.passphrase or args.derive_bip32 or args.path:
         seed_bytes = derive_bip39_seed(breakdown.mnemonic, args.passphrase)
         _print_seed_derivation(breakdown.mnemonic, args.passphrase)
-    if args.derive_bip32:
+    if args.derive_bip32 or args.path:
         try:
             _print_bip32_derivation(seed_bytes)
+            if args.path:
+                _print_bip32_path_derivation(
+                    seed_bytes, args.path, args.path_steps, args.network
+                )
         except ValueError as exc:
             print(
                 _error_message(
