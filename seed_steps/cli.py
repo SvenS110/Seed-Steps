@@ -56,7 +56,7 @@ COLOR_ENTROPY = "\033[96m"
 COLOR_CHECKSUM = "\033[93m"
 COLOR_WORD = "\033[38;5;208m"
 COLOR_PASSPHRASE = "\033[95m"
-COLOR_SEED = "\033[32m"
+COLOR_SEED = "\033[92m"
 COLOR_IL = "\033[94m"
 COLOR_IR = "\033[35m"
 COLOR_XPRV = "\033[91m"
@@ -82,10 +82,21 @@ def _colorized_11_bit_block(block: str, start_bit: int, entropy_bits_len: int) -
     )
 
 
-def _prompt_micro_step(label: str, *, enable: bool) -> None:
+def _prompt_micro_operation(
+    *,
+    number: int,
+    input_data: str,
+    operation: str,
+    output_data: str,
+    enable: bool,
+) -> None:
     if not enable:
         return
-    input(f"\nENTER -> {label}")
+    print(f"\nMicro-operacion {number}")
+    print(f"- Entrada:   {input_data}")
+    print(f"- Operacion: {operation}")
+    print(f"- Salida:    {output_data}")
+    input("ENTER para ejecutar micro-operacion...")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -328,11 +339,13 @@ def _prompt_yes_no(prompt: str) -> bool:
 
 def _prompt_continue_with_options() -> str:
     while True:
-        if _prompt_yes_no("\nContinuar al siguiente paso? (S/N): "):
+        if _prompt_yes_no("\nListo este paso. Continuamos al siguiente? (S/N): "):
             return "continue"
 
         decision = (
-            input("Elige: [C]ancelar flujo / [E]ditar esta etapa: ").strip().lower()
+            input("Elige una accion: [C]ancelar flujo / [E]ditar este paso: ")
+            .strip()
+            .lower()
         )
         if decision in {"c", "cancelar"}:
             return "cancel"
@@ -347,7 +360,7 @@ def _prompt_source_choice(
     while True:
         choice = (
             input(
-                "\nOrigen de mnemotecnica: [A] Entropia automatica / [E] Entropia manual / [M] Mnemotecnica manual: "
+                "\nPaso 1 - Elige el punto de partida: [A] Entropia automatica / [E] Entropia manual / [M] Mnemotecnica manual: "
             )
             .strip()
             .lower()
@@ -362,7 +375,7 @@ def _prompt_source_choice(
         if choice in {"e", "entropia", "entropia manual", "manual"}:
             while True:
                 entropy_hex = input(
-                    "Ingresa entropy hex (128/160/192/224/256 bits): "
+                    "Escribe la entropia en hex (32/40/48/56/64 caracteres): "
                 ).strip()
                 try:
                     entropy = parse_entropy_hex(entropy_hex)
@@ -398,12 +411,16 @@ def _prompt_source_choice(
 
 
 def _prompt_passphrase() -> str:
-    return input("\nPassphrase BIP39 (Enter para vacia): ")
+    return input("\nPaso 2 - Passphrase BIP39 (Enter si la dejas vacia): ")
 
 
 def _prompt_network() -> str:
     while True:
-        network = input("\nRed objetivo [M] mainnet / [T] testnet: ").strip().lower()
+        network = (
+            input("\nPaso 4 - Elige red objetivo [M] mainnet / [T] testnet: ")
+            .strip()
+            .lower()
+        )
         if network in {"mainnet", "m"}:
             return "mainnet"
         if network in {"testnet", "t"}:
@@ -415,7 +432,9 @@ def _prompt_hd_path(network: str) -> str:
     default_path = _default_path_for_network(network)
     while True:
         mode = (
-            input(f"\nRuta HD: [D]efault sugerida ({default_path}) / [M]anual: ")
+            input(
+                f"\nPaso 4 - Ruta HD: [D]efault sugerida ({default_path}) / [M]anual: "
+            )
             .strip()
             .lower()
         )
@@ -427,7 +446,9 @@ def _prompt_hd_path(network: str) -> str:
                 parse_bip32_path(path)
                 return path
             except ValueError as exc:
-                print(f"Entrada invalida: {exc}. Intenta nuevamente.")
+                print(
+                    f"Entrada invalida: {exc}. Revisa el formato m/.. y vuelve a intentar."
+                )
             continue
         print("Opcion invalida. Escribe D o M.")
 
@@ -469,9 +490,13 @@ def _run_bip39_guided_substeps(
     while index < len(substeps):
         title = substeps[index]
         print(f"\n{title}")
+        print("   Objetivo del paso: entender esta transformacion antes de avanzar.")
         if index == 0:
             _print_stage_entropy(breakdown)
             entropy_bits = selected_entropy_bits or len(breakdown.entropy_bits)
+            print(
+                "   Que debes observar: tamano de bits y que la fuente coincide con lo elegido."
+            )
             print(
                 f"   Fuente usada:        {source_label} (wizard) | tamano elegido: {entropy_bits} bits"
             )
@@ -480,14 +505,26 @@ def _run_bip39_guided_substeps(
             ent_bits = len(breakdown.entropy_bits)
             checksum_bits = ent_bits // 32
             print(
+                "   Que debes observar: ENT/32 define cuantos bits de checksum se agregan."
+            )
+            print(
                 f"   Calculo docente:     ENT={ent_bits} => ENT/32={checksum_bits} bits desde SHA-256(entropia)"
             )
         elif index == 2:
             _print_stage_combined_bits(breakdown, use_color=True)
+            print(
+                "   Que debes observar: cian=entropia y amarillo=checksum dentro del mismo flujo de bits."
+            )
         elif index == 3:
             _print_stage_indices_colored(breakdown)
+            print(
+                "   Que debes observar: cada bloque de 11 bits se convierte en un indice de la wordlist."
+            )
         else:
             _print_stage_mnemonic_colored(breakdown)
+            print(
+                "   Que debes observar: el orden de palabras depende exactamente del orden de bloques."
+            )
 
         action = _prompt_continue_with_options()
         if action == "cancel":
@@ -506,15 +543,25 @@ def _print_phase_seed_bip39(
     show_secrets: bool,
     interactive_micro_steps: bool = False,
 ) -> dict[str, object]:
-    _prompt_micro_step("normalizar y fijar Mnemonic", enable=interactive_micro_steps)
+    _prompt_micro_operation(
+        number=1,
+        input_data="mnemonic cruda del usuario",
+        operation="normalizar mnemotecnica (NFKD)",
+        output_data="mnemonic normalizada",
+        enable=interactive_micro_steps,
+    )
     mnemonic_value = _colorize(mnemonic, COLOR_WORD)
     print(f"\n   [micro] Mnemonic normalizada: {mnemonic_value}")
 
     passphrase_display = _display_sensitive(
         passphrase or "(vacia)", show_secrets=show_secrets
     )
-    _prompt_micro_step(
-        "normalizar passphrase y construir salt", enable=interactive_micro_steps
+    _prompt_micro_operation(
+        number=2,
+        input_data="passphrase del usuario (o vacia)",
+        operation="normalizar passphrase y concatenar con prefijo 'mnemonic'",
+        output_data="salt efectivo para PBKDF2",
+        enable=interactive_micro_steps,
     )
     salt = build_bip39_seed_salt(passphrase)
     print(
@@ -522,17 +569,27 @@ def _print_phase_seed_bip39(
         f"'mnemonic' + {_colorize(passphrase_display, COLOR_PASSPHRASE)} => {_colorize(salt, COLOR_PASSPHRASE)}"
     )
 
-    _prompt_micro_step(
-        "ejecutar PBKDF2-HMAC-SHA512 (2048)", enable=interactive_micro_steps
+    _prompt_micro_operation(
+        number=3,
+        input_data="mnemonic normalizada + salt",
+        operation="PBKDF2-HMAC-SHA512 (2048 iteraciones)",
+        output_data="seed BIP39 de 64 bytes",
+        enable=interactive_micro_steps,
     )
     seed_bytes = derive_bip39_seed(mnemonic, passphrase)
     print("\nFase B) Seed BIP39")
+    print("   Objetivo del paso: convertir la mnemotecnica en una seed de 64 bytes.")
     print(
         "   Lectura docente: tomamos tu frase y la pasamos por una maquina de estiramiento criptografico."
     )
+    print(
+        "   Que debes observar: cambiar passphrase produce una seed completamente distinta."
+    )
     print("   Que entra:")
     print(f"   - Mnemonic:           {mnemonic_value}")
+    print()
     print(f"   - Passphrase:         {_colorize(passphrase_display, COLOR_PASSPHRASE)}")
+    print()
     print("   Que operacion se hace:")
     print(
         "   - Formula mental: "
@@ -540,7 +597,9 @@ def _print_phase_seed_bip39(
         f"{_colorize('mnemonic', COLOR_WORD)}, salt='mnemonic'+{_colorize('passphrase', COLOR_PASSPHRASE)}, 2048)"
     )
     print("   - Motor real: PBKDF2-HMAC-SHA512, iteraciones=2048")
+    print()
     print(f"   - Salt:               {_colorize(salt, COLOR_PASSPHRASE)}")
+    print()
     print("   Que sale:")
     print(
         f"   - Seed (hex, 64 bytes): {_colorize(_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED)}"
@@ -551,13 +610,21 @@ def _print_phase_seed_bip39(
 def _print_phase_master_bip32(
     seed_bytes: bytes, *, show_secrets: bool, interactive_micro_steps: bool = False
 ) -> dict[str, object]:
-    _prompt_micro_step(
-        "preparar entrada seed para HMAC", enable=interactive_micro_steps
+    _prompt_micro_operation(
+        number=1,
+        input_data="seed BIP39 (64 bytes)",
+        operation="preparar seed como mensaje para HMAC",
+        output_data="mensaje listo para HMAC-SHA512",
+        enable=interactive_micro_steps,
     )
     seed_hex = _display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)
     print(f"\n   [micro] Seed entrada: {_colorize(seed_hex, COLOR_SEED)}")
-    _prompt_micro_step(
-        "ejecutar HMAC-SHA512 con clave 'Bitcoin seed'", enable=interactive_micro_steps
+    _prompt_micro_operation(
+        number=2,
+        input_data="clave='Bitcoin seed' + mensaje=seed",
+        operation="HMAC-SHA512(clave, mensaje)",
+        output_data="digest I (IL || IR)",
+        enable=interactive_micro_steps,
     )
     master = derive_bip32_master_node(seed_bytes)
     hmac_hex = _display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)
@@ -567,8 +634,11 @@ def _print_phase_master_bip32(
     ir_hex = _display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)
     i_colored = _colorize(il_hex, COLOR_IL) + _colorize(ir_hex, COLOR_IR)
 
-    _prompt_micro_step(
-        "serializar xprv (version+depth+fp+child+cc+key)",
+    _prompt_micro_operation(
+        number=3,
+        input_data="IL (master key) + IR (chain code)",
+        operation="serializar payload xprv (BIP32 mainnet)",
+        output_data="xprv payload previo a Base58Check",
         enable=interactive_micro_steps,
     )
     xprv_key_data = "00" + master.master_private_key.hex()
@@ -580,8 +650,11 @@ def _print_phase_master_bip32(
         + master.chain_code.hex()
         + xprv_key_data
     )
-    _prompt_micro_step(
-        "serializar xpub (version+depth+fp+child+cc+pubkey)",
+    _prompt_micro_operation(
+        number=4,
+        input_data="pubkey comprimida + chain code",
+        operation="serializar payload xpub (BIP32 mainnet)",
+        output_data="xpub payload previo a Base58Check",
         enable=interactive_micro_steps,
     )
     pubkey_compressed = compressed_pubkey_from_private_key(
@@ -598,14 +671,24 @@ def _print_phase_master_bip32(
 
     print("\nFase C) Master BIP32")
     print(
+        "   Objetivo del paso: obtener la clave maestra y el chain code del arbol HD."
+    )
+    print(
         "   Lectura docente: desde la seed nacen dos piezas: secreto maestro y cadena de derivacion."
+    )
+    print(
+        "   Que debes observar: IL e IR salen del mismo HMAC, pero cumplen funciones distintas."
     )
     print("   Que entra:")
     print(f"   - Seed:               {_colorize(seed_hex, COLOR_SEED)}")
+    print()
     print("   Que operacion se hace:")
     print(f"   - Clave HMAC:         {_colorize('Bitcoin seed', COLOR_IR)}")
+    print()
     print(f"   - Entrada HMAC:       {_colorize(seed_hex, COLOR_SEED)}")
+    print()
     print("   - Operacion:          HMAC-SHA512(clave, entrada)")
+    print()
     print("   Que sale:")
     print(f"   - I:                  {i_colored}  | IL(izq, azul) + IR(der, morado)")
     print(
@@ -634,11 +717,16 @@ def _print_phase_hd_path(
     parsed = parse_bip32_path(path)
     current = derive_bip32_node_from_master(master)
     print("\nFase D) Ruta HD")
+    print("   Objetivo del paso: llegar desde la raiz a una clave hija especifica.")
     print(
         "   Mapa mental BIP44/BIP84: m / purpose' / coin_type' / account' / change / index"
     )
+    print(
+        "   Que debes observar: un solo cambio en la ruta termina en otra clave y otra direccion."
+    )
     print("   Que entra:")
     print(f"   - Ruta:               {path}")
+    print()
     route_tokens = ["m"] + [step.token for step in parsed]
     level_labels = [
         "raiz",
@@ -656,11 +744,16 @@ def _print_phase_hd_path(
         print(f"   {i:>5} | {value:<7} | {label}")
     print("   Que operacion se hace:")
     print("   - Derivacion nivel por nivel (de m hacia la hoja)")
+    print()
     if not parsed:
         print("   - m (sin derivacion) | Se mantiene el nodo maestro en depth=0")
-    for step in parsed:
-        _prompt_micro_step(
-            f"derivar nivel {step.token}", enable=interactive_micro_steps
+    for micro_index, step in enumerate(parsed, start=1):
+        _prompt_micro_operation(
+            number=micro_index,
+            input_data=f"nodo depth={current.depth} + paso={step.token}",
+            operation="CKDpriv segun tipo hardened/normal",
+            output_data="nodo hijo del siguiente nivel",
+            enable=interactive_micro_steps,
         )
         current = derive_bip32_path_from_node(current, f"m/{step.token}")
         index_label = (
@@ -682,26 +775,51 @@ def _print_phase_hd_path(
 def _print_phase_address(
     derived, network: str, *, show_secrets: bool, interactive_micro_steps: bool = False
 ) -> dict[str, object]:
-    _prompt_micro_step(
-        "obtener pubkey comprimida desde nodo derivado", enable=interactive_micro_steps
+    _prompt_micro_operation(
+        number=1,
+        input_data="nodo derivado (clave privada hija)",
+        operation="extraer pubkey comprimida",
+        output_data="pubkey comprimida lista para hash",
+        enable=interactive_micro_steps,
     )
     p2wpkh = derive_p2wpkh_address_from_node(derived, network)
     print("\nFase E) Direccion")
     print(
+        "   Objetivo del paso: transformar la clave publica derivada en direccion usable."
+    )
+    print(
         "   Contexto: la pubkey comprimida sale del nodo derivado (clave privada hija)."
     )
+    print("   Que debes observar: red y ruta afectan directamente el resultado final.")
     print("   Que entra:")
     print(
         f"   - Pubkey comprimida:  {_colorize(_display_sensitive(p2wpkh.compressed_pubkey.hex(), show_secrets=show_secrets), COLOR_XPUB)}"
     )
+    print()
     print(f"   - Red:                {network}")
-    _prompt_micro_step("aplicar HASH160(pubkey)", enable=interactive_micro_steps)
+    _prompt_micro_operation(
+        number=2,
+        input_data="pubkey comprimida",
+        operation="HASH160(pubkey)",
+        output_data="hash160 (20 bytes)",
+        enable=interactive_micro_steps,
+    )
     hash160_hex = _display_sensitive(p2wpkh.hash160.hex(), show_secrets=show_secrets)
-    _prompt_micro_step(
-        "formar witness program SegWit v0", enable=interactive_micro_steps
+    _prompt_micro_operation(
+        number=3,
+        input_data="hash160 + witness_version=0",
+        operation="formar witness program SegWit v0",
+        output_data="script witness OP_0 <20-byte-hash>",
+        enable=interactive_micro_steps,
     )
     witness_line = f"OP_{p2wpkh.witness_version} {p2wpkh.witness_program.hex()}"
-    _prompt_micro_step("codificar Bech32(hrp, witness)", enable=interactive_micro_steps)
+    _prompt_micro_operation(
+        number=4,
+        input_data="hrp de red + witness program",
+        operation="codificar Bech32",
+        output_data="direccion P2WPKH final",
+        enable=interactive_micro_steps,
+    )
     print("   Que operacion se hace:")
     print(
         "   - Flujo completo: "
@@ -728,34 +846,49 @@ def _print_phase_final_summary(
     show_secrets: bool,
 ) -> None:
     print("\nFase F) Resumen final")
+    print("   Objetivo del paso: consolidar entradas y salidas clave del recorrido.")
+    print(
+        "   Que debes observar: con estos mismos datos siempre obtienes el mismo resultado."
+    )
     print("   Inputs usados:")
     colored_mnemonic = " ".join(
         _colorize(word, COLOR_WORD) for word in mnemonic.split()
     )
     print(f"   - Mnemonic:           {colored_mnemonic}")
+    print()
     print(
         f"   - Passphrase:         {_colorize(_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets), COLOR_PASSPHRASE)}"
     )
+    print()
     print(f"   - Ruta:               {path}")
+    print()
     print(f"   - Red:                {network}")
+    print()
     print("   Outputs clave:")
     print(
         f"   - Seed:               {_colorize(_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED)}"
     )
+    print()
     print(
         f"   - IL master:          {_colorize(_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets), COLOR_IL)}"
     )
+    print()
     print(
         f"   - IR master:          {_colorize(_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets), COLOR_IR)}"
     )
+    print()
     print(
         f"   - xprv master:        {_colorize(_display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
     )
+    print()
     print(f"   - xpub master:        {_colorize(master.xpub, COLOR_XPUB)}")
+    print()
     print(
         f"   - xprv derivado:      {_colorize(_display_sensitive(derived.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
     )
+    print()
     print(f"   - xpub derivado:      {_colorize(derived.xpub, COLOR_XPUB)}")
+    print()
     print(
         f"   - Direccion final:    {_colorize(final_addr.address, COLOR_FINAL_ADDRESS)}"
     )
@@ -827,6 +960,10 @@ def _run_interactive_guided_pipeline(state: dict[str, object]) -> int:
 
 def _print_manual_mnemonic_limit_note() -> None:
     print("\nSubpaso BIP39 (entrada manual de mnemotecnica)")
+    print("   Objetivo del paso: aclarar el limite didactico de esta modalidad.")
+    print(
+        "   Que debes observar: aqui continuamos desde frase, no desde entropia original."
+    )
     print(
         "No se puede reconstruir de forma fiable la entropia/checksum/bloques de 11 bits ORIGINALES "
         "a partir de solo la mnemotecnica ingresada."
@@ -850,10 +987,12 @@ def _print_detailed_breakdown(breakdown) -> None:
 
 def _run_interactive(wordlist: list[str]) -> int:
     _print_header()
-    print("Bienvenido al wizard guiado 11.3 de Seed Steps.")
-    print("Cada fase pide datos, valida entrada y muestra resultado antes de avanzar.")
+    print("Bienvenido al aula practica guiada de Seed Steps.")
     print(
-        "Nota: en wizard se muestran valores COMPLETOS por preferencia didactica del usuario."
+        "Avanzamos por pasos cortos: eliges entrada, ves operacion y confirmas salida."
+    )
+    print(
+        "Nota docente: en el wizard se muestran valores COMPLETOS para fines de aprendizaje."
     )
     print(
         "No uses material real; la politica segura por defecto sigue activa fuera del wizard."

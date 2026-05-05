@@ -208,14 +208,15 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
     )
 
     def fake_input(prompt=""):
+        prompt_l = prompt.lower()
         try:
             return next(inputs)
         except StopIteration:
-            if "Red objetivo" in prompt:
+            if "red objetivo" in prompt_l:
                 return "mainnet"
-            if "Ruta HD" in prompt:
+            if "ruta hd" in prompt_l:
                 return "d"
-            if "Continuar al siguiente paso" in prompt:
+            if "continuamos al siguiente" in prompt_l:
                 return "s"
             return ""
 
@@ -226,18 +227,24 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
 
     assert exit_code == 0
     assert captured.err == ""
-    assert "wizard guiado 11.3" in captured.out
+    assert "aula practica guiada" in captured.out
     assert "Etapa 1/5 completada: origen seleccionado" in captured.out
     assert "Subpaso BIP39 1/5: Entropia" in captured.out
+    assert "Objetivo del paso:" in captured.out
+    assert "Que debes observar:" in captured.out
     assert "Subpaso BIP39 4/5: Indices (bloques de 11 bits)" in captured.out
     assert "Subpaso BIP39 5/5: Mnemotecnica" in captured.out
     assert "Fase B) Seed BIP39" in captured.out
+    assert "Micro-operacion 1" in captured.out
+    assert "- Entrada:" in captured.out
+    assert "- Operacion:" in captured.out
+    assert "- Salida:" in captured.out
     assert "Fase C) Master BIP32" in captured.out
     assert "Fase D) Ruta HD" in captured.out
     assert "Fase E) Direccion" in captured.out
     assert "Fase F) Resumen final" in captured.out
     assert "Direccion final:" in captured.out
-    assert "Nota: en wizard se muestran valores COMPLETOS" in captured.out
+    assert "Nota docente: en el wizard se muestran valores COMPLETOS" in captured.out
 
 
 def test_cli_interactive_guided_retries_invalid_inputs(capsys, monkeypatch) -> None:
@@ -269,14 +276,15 @@ def test_cli_interactive_guided_retries_invalid_inputs(capsys, monkeypatch) -> N
     )
 
     def fake_input(prompt=""):
+        prompt_l = prompt.lower()
         try:
             return next(inputs)
         except StopIteration:
-            if "Red objetivo" in prompt:
+            if "red objetivo" in prompt_l:
                 return "testnet"
-            if "Ruta HD" in prompt:
+            if "ruta hd" in prompt_l:
                 return "d"
-            if "Continuar al siguiente paso" in prompt:
+            if "continuamos al siguiente" in prompt_l:
                 return "s"
             return ""
 
@@ -334,14 +342,15 @@ def test_cli_interactive_guided_manual_mnemonic_explains_bip39_limit(
     )
 
     def fake_input(prompt=""):
+        prompt_l = prompt.lower()
         try:
             return next(inputs)
         except StopIteration:
-            if "Red objetivo" in prompt:
+            if "red objetivo" in prompt_l:
                 return "mainnet"
-            if "Ruta HD" in prompt:
+            if "ruta hd" in prompt_l:
                 return "d"
-            if "Continuar al siguiente paso" in prompt:
+            if "continuamos al siguiente" in prompt_l:
                 return "s"
             return ""
 
@@ -356,6 +365,7 @@ def test_cli_interactive_guided_manual_mnemonic_explains_bip39_limit(
         "No se puede reconstruir de forma fiable la entropia/checksum/bloques de 11 bits ORIGINALES"
         in captured.out
     )
+    assert "Objetivo del paso: aclarar el limite didactico" in captured.out
     assert "Fase B) Seed BIP39" in captured.out
 
 
