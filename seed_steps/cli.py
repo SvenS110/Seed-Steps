@@ -207,7 +207,34 @@ def _print_substep_sections(
 
 
 def _as_multiline_block(label: str, value: str) -> str:
-    return f"{label}:\n{value}"
+    indented_value = "\n".join(f"    {line}" for line in value.splitlines())
+    return f"{label}:\n{indented_value}"
+
+
+def _print_raw_summary_block(
+    *,
+    mnemonic: str,
+    passphrase: str,
+    path: str,
+    network: str,
+    seed_bytes: bytes,
+    master,
+    derived,
+    final_addr,
+) -> None:
+    print()
+    print("mnemonic=" + mnemonic)
+    print("passphrase=" + passphrase)
+    print("path=" + path)
+    print("network=" + network)
+    print("seed=" + seed_bytes.hex())
+    print("il_master=" + master.master_private_key.hex())
+    print("ir_master=" + master.chain_code.hex())
+    print("xprv_master=" + master.xprv)
+    print("xpub_master=" + master.xpub)
+    print("xprv_derived=" + derived.xprv)
+    print("xpub_derived=" + derived.xpub)
+    print("address=" + final_addr.address)
 
 
 def _pbkdf2_u_sequence(
@@ -351,6 +378,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-secrets",
         action="store_true",
         help="Fuerza redaccion de secretos. Tiene prioridad sobre --show-secrets.",
+    )
+    parser.add_argument(
+        "--summary-raw",
+        action="store_true",
+        help="En wizard, agrega al final un bloque plano key=value sin ANSI.",
     )
     return parser
 
@@ -1008,8 +1040,8 @@ def _run_bip39_guided_substeps(
                 f"- {ts.formula(f'ultimo: int({breakdown.steps[-1].bit_block}, 2) = {breakdown.steps[-1].index}')}"
             )
             _print_substep_section("Desarrollo")
-            print("- pos | bloque(11-bit) | indice | palabra")
-            print("- ----+----------------+--------+----------")
+            print("pos | bloque(11-bit) | indice | palabra")
+            print("----+----------------+--------+----------")
             for pos, step in enumerate(breakdown.steps, start=1):
                 block_colored = _color_segmented_bits(
                     step.bit_block,
@@ -1017,7 +1049,6 @@ def _run_bip39_guided_substeps(
                     entropy_bits_len=len(breakdown.entropy_bits),
                 )
                 print(
-                    "- "
                     f"{pos} | {block_colored} | {ts.bright_white(str(step.index))} | {ts.orange(step.word)}"
                 )
             _print_substep_section("Resultado")
@@ -1090,12 +1121,14 @@ def _print_phase_seed_bip39(
                 math=[ts.formula("password = mnemonic_norm_utf8")],
                 substitution=[ts.formula("password = NFKD(mnemonic)")],
                 development=[
-                    "mnemotecnica (agrupada):\n"
-                    + "\n".join(
-                        [
-                            " ".join(mnemonic.split()[i : i + 4])
-                            for i in range(0, len(mnemonic.split()), 4)
-                        ]
+                    _as_multiline_block(
+                        "mnemotecnica (agrupada)",
+                        "\n".join(
+                            [
+                                " ".join(mnemonic.split()[i : i + 4])
+                                for i in range(0, len(mnemonic.split()), 4)
+                            ]
+                        ),
                     ),
                 ],
                 result=["salida -> mnemonic original para normalizar"],
@@ -1116,7 +1149,9 @@ def _print_phase_seed_bip39(
                     ts.formula(f"len(password) = {len(mnemonic_bytes)} bytes")
                 ],
                 development=[
-                    "password bytes (hex):\n" + format_hex_bytes(mnemonic_bytes),
+                    _as_multiline_block(
+                        "password bytes (hex)", format_hex_bytes(mnemonic_bytes)
+                    ),
                 ],
                 result=["salida -> password para PBKDF2"],
                 next_step=["Procesar passphrase bajo misma regla NFKD."],
@@ -1159,7 +1194,9 @@ def _print_phase_seed_bip39(
                 substitution=[ts.formula(f"salt = 'mnemonic' + '{passphrase}'")],
                 development=[
                     "salt (texto): " + _colorize(salt, COLOR_PASSPHRASE),
-                    "salt bytes (hex):\n" + format_hex_bytes(salt_bytes),
+                    _as_multiline_block(
+                        "salt bytes (hex)", format_hex_bytes(salt_bytes)
+                    ),
                 ],
                 result=["salida -> salt para PBKDF2"],
                 next_step=["Ejecutar PBKDF2-HMAC-SHA512 con 2048 iteraciones."],
@@ -1521,6 +1558,7 @@ def _print_phase_hd_path(
                 inputs=["master node + pasos"],
                 math=[
                     ts.formula("child = CKDpriv(parent, index)"),
+                    "Caso hardened:",
                     ts.formula("hardened_index = index + 2^31"),
                     ts.formula(
                         "data = 0x00 || ser256(k_parent) || ser32(hardened_index)"
@@ -1529,6 +1567,7 @@ def _print_phase_hd_path(
                     ts.formula("IL, IR = I[0:32], I[32:64]"),
                     ts.formula("k_child = (parse256(IL) + k_parent) mod n"),
                     ts.formula("c_child = IR"),
+                    "Caso normal:",
                     ts.formula("data = serP(point(k_parent)) || ser32(index)"),
                     ts.formula("I = HMAC-SHA512(key=c_parent, data=data)"),
                     ts.formula("IL, IR = I[0:32], I[32:64]"),
@@ -1729,6 +1768,7 @@ def _print_phase_final_summary(
     derived,
     final_addr,
     show_secrets: bool,
+    summary_raw: bool = False,
 ) -> None:
     print("\nFase F) Resumen final")
     print(f"{ts.dim('━' * 88)}")
@@ -1738,6 +1778,7 @@ def _print_phase_final_summary(
     )
     print()
     print(f"- mnemonic = {colored_mnemonic}")
+    print()
     print(
         "- passphrase = "
         + _colorize(
@@ -1745,7 +1786,9 @@ def _print_phase_final_summary(
             COLOR_PASSPHRASE,
         )
     )
+    print()
     print(f"- path = {path}")
+    print()
     print(f"- network = {network}")
 
     print()
@@ -1757,6 +1800,7 @@ def _print_phase_final_summary(
             _display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED
         )
     )
+    print()
     print(
         "- IL master = "
         + _colorize(
@@ -1766,6 +1810,7 @@ def _print_phase_final_summary(
             COLOR_IL,
         )
     )
+    print()
     print(
         "- IR master = "
         + _colorize(
@@ -1773,25 +1818,42 @@ def _print_phase_final_summary(
             COLOR_IR,
         )
     )
+    print()
     print(
         "- xprv master = "
         + _colorize(
             _display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV
         )
     )
+    print()
     print(f"- xpub master = {_colorize(master.xpub, COLOR_XPUB)}")
+    print()
     print(
         "- xprv derivado = "
         + _colorize(
             _display_sensitive(derived.xprv, show_secrets=show_secrets), COLOR_XPRV
         )
     )
+    print()
     print(f"- xpub derivado = {_colorize(derived.xpub, COLOR_XPUB)}")
+    print()
     print(f"- direccion final = {ts.bright_white(final_addr.address)}")
 
     print()
     print(ts.warning("ADVERTENCIA:"))
     print("- EDUCATIVO, NO CUSTODIA REAL")
+
+    if summary_raw:
+        _print_raw_summary_block(
+            mnemonic=mnemonic,
+            passphrase=passphrase,
+            path=path,
+            network=network,
+            seed_bytes=seed_bytes,
+            master=master,
+            derived=derived,
+            final_addr=final_addr,
+        )
 
 
 def _run_interactive_guided_pipeline(state: dict[str, object]) -> int:
@@ -1890,6 +1952,7 @@ def _run_interactive(
     preset_entropy: bytes | None = None,
     no_pause: bool = False,
     default_passphrase: str = "",
+    summary_raw: bool = False,
 ) -> int:
     _print_header()
     print(f"Bienvenido a {ts.orange('Seed Steps')} by SvenS101")
@@ -1912,6 +1975,7 @@ def _run_interactive(
         "network": "mainnet",
         "path": "",
         "show_secrets": False,
+        "summary_raw": summary_raw,
     }
 
     stage_index = 0
@@ -2052,6 +2116,7 @@ def _run_interactive(
                 derived=state["derived"],
                 final_addr=state["final_addr"],
                 show_secrets=True,
+                summary_raw=bool(state["summary_raw"]),
             )
             print("\nEtapa 5/5 completada: direccion y resumen final")
             stage_index += 1
@@ -2496,6 +2561,7 @@ def run() -> int:
             preset_entropy=preset_entropy,
             no_pause=args.no_pause,
             default_passphrase=args.passphrase,
+            summary_raw=args.summary_raw,
         )
 
     show_secrets = args.show_secrets and not args.no_secrets

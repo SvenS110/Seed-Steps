@@ -489,6 +489,10 @@ def test_cli_wizard_summary_and_bip32_hmac_key_narrative_no_color(
     )
     assert "- direccion final = bc1" in captured.out
     assert "- direccion final =\n" not in captured.out
+    assert "- 1 | 00000000000 |" not in captured.out
+    assert "Caso hardened:" in captured.out
+    assert "Caso normal:" in captured.out
+    assert "hardened_index = index + 2^31" in captured.out
     assert "- seed = c55257c360c07c72029aebc1b53c05ed" in captured.out
     assert (
         "- mnemonic = abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
@@ -500,6 +504,38 @@ def test_cli_wizard_summary_and_bip32_hmac_key_narrative_no_color(
     assert "- xpub master = xpub661MyMwAqRbcG" in captured.out
     assert "-   " not in captured.out
     assert "Listo este paso. Continuamos al siguiente?" not in captured.out
+
+
+def test_cli_wizard_summary_raw_appends_plain_block(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--wizard",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--passphrase",
+            "TREZOR",
+            "--no-pause",
+            "--no-color",
+            "--summary-raw",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "seed=" in captured.out
+    assert "il_master=" in captured.out
+    assert "ir_master=" in captured.out
+    assert "xprv_master=" in captured.out
+    assert "xpub_master=" in captured.out
+    assert "xprv_derived=" in captured.out
+    assert "xpub_derived=" in captured.out
+    assert "address=" in captured.out
 
 
 def test_cli_colors_respect_no_color_and_default_mode(capsys, monkeypatch) -> None:
