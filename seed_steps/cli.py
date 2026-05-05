@@ -1737,73 +1737,57 @@ def _print_phase_final_summary(
         _colorize(word, COLOR_WORD) for word in mnemonic.split()
     )
     print()
-    print("- mnemonic =")
-    print(colored_mnemonic)
-    print()
-    print("- passphrase =")
+    print(f"- mnemonic = {colored_mnemonic}")
     print(
-        _colorize(
+        "- passphrase = "
+        + _colorize(
             _display_sensitive(passphrase or "(vacia)", show_secrets=show_secrets),
             COLOR_PASSPHRASE,
         )
     )
-    print()
-    print("- path =")
-    print(path)
-    print()
-    print("- network =")
-    print(network)
+    print(f"- path = {path}")
+    print(f"- network = {network}")
 
     print()
     print(ts.bright_white("Outputs clave:"))
     print()
-    print("- seed =")
     print(
-        _colorize(
+        "- seed = "
+        + _colorize(
             _display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED
         )
     )
-    print()
-    print("- IL master =")
     print(
-        _colorize(
+        "- IL master = "
+        + _colorize(
             _display_sensitive(
                 master.master_private_key.hex(), show_secrets=show_secrets
             ),
             COLOR_IL,
         )
     )
-    print()
-    print("- IR master =")
     print(
-        _colorize(
+        "- IR master = "
+        + _colorize(
             _display_sensitive(master.chain_code.hex(), show_secrets=show_secrets),
             COLOR_IR,
         )
     )
-    print()
-    print("- xprv master =")
     print(
-        _colorize(
+        "- xprv master = "
+        + _colorize(
             _display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV
         )
     )
-    print()
-    print("- xpub master =")
-    print(_colorize(master.xpub, COLOR_XPUB))
-    print()
-    print("- xprv derivado =")
+    print(f"- xpub master = {_colorize(master.xpub, COLOR_XPUB)}")
     print(
-        _colorize(
+        "- xprv derivado = "
+        + _colorize(
             _display_sensitive(derived.xprv, show_secrets=show_secrets), COLOR_XPRV
         )
     )
-    print()
-    print("- xpub derivado =")
-    print(_colorize(derived.xpub, COLOR_XPUB))
-    print()
-    print("- direccion final =")
-    print(_colorize(final_addr.address, COLOR_FINAL_ADDRESS))
+    print(f"- xpub derivado = {_colorize(derived.xpub, COLOR_XPUB)}")
+    print(f"- direccion final = {ts.bright_white(final_addr.address)}")
 
     print()
     print(ts.warning("ADVERTENCIA:"))

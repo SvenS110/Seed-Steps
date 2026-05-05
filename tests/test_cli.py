@@ -487,13 +487,17 @@ def test_cli_wizard_summary_and_bip32_hmac_key_narrative_no_color(
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         in captured.out
     )
-    assert "direccion final = bc1" in captured.out
-    assert "- seed =" in captured.out
-    assert "\n- seed =\nc55257c360c07c72029aebc1b53c05ed" in captured.out
-    assert "\n- IL master =\ncbedc75b0d6412c85c79" in captured.out
-    assert "\n- IR master =\na3fa8c983223306d" in captured.out
-    assert "\n- xprv master =\nxprv9s21ZrQH143K3" in captured.out
-    assert "\n- xpub master =\nxpub661MyMwAqRbcG" in captured.out
+    assert "- direccion final = bc1" in captured.out
+    assert "- direccion final =\n" not in captured.out
+    assert "- seed = c55257c360c07c72029aebc1b53c05ed" in captured.out
+    assert (
+        "- mnemonic = abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        in captured.out
+    )
+    assert "- IL master = cbedc75b0d6412c85c79" in captured.out
+    assert "- IR master = a3fa8c983223306d" in captured.out
+    assert "- xprv master = xprv9s21ZrQH143K3" in captured.out
+    assert "- xpub master = xpub661MyMwAqRbcG" in captured.out
     assert "-   " not in captured.out
     assert "Listo este paso. Continuamos al siguiente?" not in captured.out
 
