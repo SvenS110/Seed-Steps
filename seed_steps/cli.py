@@ -33,6 +33,10 @@ from seed_steps import terminal_style as ts
 from seed_steps.trace import MathTrace
 
 
+class UserCancelledFlow(Exception):
+    """Sentinel for user-driven cancellation in wizard substeps."""
+
+
 def _error_message(error_type: str, cause: str, guide: str) -> str:
     return f"ERROR {error_type}: {cause}. Accion sugerida: {guide}."
 
@@ -701,13 +705,26 @@ def _prompt_continue_with_options() -> str:
         print("Opcion invalida. Escribe C para cancelar o E para editar.")
 
 
+def _prompt_substep_transition(*, pause_between_steps: bool) -> str:
+    if not pause_between_steps:
+        return "continue"
+    return _prompt_continue_with_options()
+
+
+def _styled_choice_letter(letter: str) -> str:
+    return f"[{ts.bright_white(letter)}]"
+
+
 def _prompt_source_choice(
     wordlist: list[str],
 ) -> tuple[bytes | None, str, str, int | None]:
     while True:
         choice = (
             input(
-                "\nPaso 1 - Elige el punto de partida: [A] Entropia automatica / [E] Entropia manual / [M] Mnemotecnica manual: "
+                "\nPaso 1 - Elige el punto de partida: "
+                f"{_styled_choice_letter('A')} Entropia automatica / "
+                f"{_styled_choice_letter('E')} Entropia manual / "
+                f"{_styled_choice_letter('M')} Mnemotecnica manual: "
             )
             .strip()
             .lower()
@@ -1048,7 +1065,9 @@ def _print_phase_seed_bip39(
         "PBKDF2-HMAC-SHA512",
         "Seed final",
     ]
-    for index, name in enumerate(substeps, start=1):
+    index = 1
+    while index <= len(substeps):
+        name = substeps[index - 1]
         _print_substep_header(2, index, len(substeps), name)
         if index == 1:
             _print_substep_sections(
@@ -1204,6 +1223,13 @@ def _print_phase_seed_bip39(
                     "Salida hacia Fase 3: usar seed como mensaje de HMAC BIP32."
                 ],
             )
+        action = _prompt_substep_transition(pause_between_steps=interactive_micro_steps)
+        if action == "cancel":
+            raise UserCancelledFlow
+        if action == "retry":
+            continue
+        index += 1
+
     return {"seed_bytes": seed_bytes, "salt": salt}
 
 
@@ -1249,7 +1275,9 @@ def _print_phase_master_bip32(
         "Payload xpub",
         "Nodo maestro final",
     ]
-    for index, name in enumerate(substeps, start=1):
+    index = 1
+    while index <= len(substeps):
+        name = substeps[index - 1]
         _print_substep_header(3, index, len(substeps), name)
         if index == 1:
             _print_substep_sections(
@@ -1346,6 +1374,13 @@ def _print_phase_master_bip32(
                 result=["salida -> Fase 4 usa este nodo como origen"],
                 next_step=["Aplicar ruta HD objetivo en la siguiente fase."],
             )
+        action = _prompt_substep_transition(pause_between_steps=interactive_micro_steps)
+        if action == "cancel":
+            raise UserCancelledFlow
+        if action == "retry":
+            continue
+        index += 1
+
     return {"master": master}
 
 
@@ -1393,7 +1428,9 @@ def _print_phase_hd_path(
         "Nodo hoja",
         "Material derivado",
     ]
-    for index, name in enumerate(substeps, start=1):
+    index = 1
+    while index <= len(substeps):
+        name = substeps[index - 1]
         _print_substep_header(4, index, len(substeps), name)
         if index == 1:
             _print_substep_sections(
@@ -1495,6 +1532,13 @@ def _print_phase_hd_path(
                 result=["salida -> Fase 5 usa esta clave publica"],
                 next_step=["Construir HASH160 y codificar Bech32."],
             )
+        action = _prompt_substep_transition(pause_between_steps=interactive_micro_steps)
+        if action == "cancel":
+            raise UserCancelledFlow
+        if action == "retry":
+            continue
+        index += 1
+
     return {"derived": current}
 
 
@@ -1513,7 +1557,9 @@ def _print_phase_address(
         "Codificacion Bech32",
         "Direccion final",
     ]
-    for index, name in enumerate(substeps, start=1):
+    index = 1
+    while index <= len(substeps):
+        name = substeps[index - 1]
         _print_substep_header(5, index, len(substeps), name)
         if index == 1:
             _print_substep_sections(
@@ -1613,6 +1659,13 @@ def _print_phase_address(
                 ],
                 next_step=["Salida hacia resumen final del wizard."],
             )
+        action = _prompt_substep_transition(pause_between_steps=interactive_micro_steps)
+        if action == "cancel":
+            raise UserCancelledFlow
+        if action == "retry":
+            continue
+        index += 1
+
     return {"final_addr": p2wpkh}
 
 
@@ -1768,7 +1821,7 @@ def _run_interactive(
     wordlist: list[str], *, preset_entropy: bytes | None = None, no_pause: bool = False
 ) -> int:
     _print_header()
-    print("Bienvenido a Seed Steps by SvenS101")
+    print(ts.bright_white("Bienvenido a Seed Steps by SvenS101"))
     print(
         "Avanzamos por pasos cortos: eliges entrada, ves operacion y confirmas salida."
     )
@@ -1852,21 +1905,29 @@ def _run_interactive(
         elif stage_index == 1:
             passphrase = "" if no_pause else _prompt_passphrase()
             state["passphrase"] = passphrase
-            seed_artifacts = _print_phase_seed_bip39(
-                mnemonic=str(state["mnemonic"]),
-                passphrase=passphrase,
-                show_secrets=True,
-                interactive_micro_steps=not no_pause,
-            )
+            try:
+                seed_artifacts = _print_phase_seed_bip39(
+                    mnemonic=str(state["mnemonic"]),
+                    passphrase=passphrase,
+                    show_secrets=True,
+                    interactive_micro_steps=not no_pause,
+                )
+            except UserCancelledFlow:
+                print("Flujo cancelado por usuario. Salida limpia.")
+                return 0
             state.update(seed_artifacts)
             print("\nEtapa 2/5 completada: seed BIP39 derivada")
 
         elif stage_index == 2:
-            master_artifacts = _print_phase_master_bip32(
-                state["seed_bytes"],
-                show_secrets=True,
-                interactive_micro_steps=not no_pause,
-            )
+            try:
+                master_artifacts = _print_phase_master_bip32(
+                    state["seed_bytes"],
+                    show_secrets=True,
+                    interactive_micro_steps=not no_pause,
+                )
+            except UserCancelledFlow:
+                print("Flujo cancelado por usuario. Salida limpia.")
+                return 0
             state.update(master_artifacts)
             print("\nEtapa 3/5 completada: master BIP32 derivada")
 
@@ -1879,22 +1940,30 @@ def _run_interactive(
                 else _prompt_hd_path(str(state["network"]))
             )
             state["path"] = path
-            path_artifacts = _print_phase_hd_path(
-                state["master"],
-                path,
-                show_secrets=True,
-                interactive_micro_steps=not no_pause,
-            )
+            try:
+                path_artifacts = _print_phase_hd_path(
+                    state["master"],
+                    path,
+                    show_secrets=True,
+                    interactive_micro_steps=not no_pause,
+                )
+            except UserCancelledFlow:
+                print("Flujo cancelado por usuario. Salida limpia.")
+                return 0
             state.update(path_artifacts)
             print("\nEtapa 4/5 completada: ruta HD derivada")
 
         else:
-            address_artifacts = _print_phase_address(
-                state["derived"],
-                str(state["network"]),
-                show_secrets=True,
-                interactive_micro_steps=not no_pause,
-            )
+            try:
+                address_artifacts = _print_phase_address(
+                    state["derived"],
+                    str(state["network"]),
+                    show_secrets=True,
+                    interactive_micro_steps=not no_pause,
+                )
+            except UserCancelledFlow:
+                print("Flujo cancelado por usuario. Salida limpia.")
+                return 0
             state.update(address_artifacts)
             _print_phase_final_summary(
                 mnemonic=str(state["mnemonic"]),
