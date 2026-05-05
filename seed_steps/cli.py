@@ -206,6 +206,10 @@ def _print_substep_sections(
             _print_bullet(item)
 
 
+def _as_multiline_block(label: str, value: str) -> str:
+    return f"{label}:\n{value}"
+
+
 def _pbkdf2_u_sequence(
     password: bytes, salt: bytes, iterations: int = 2048
 ) -> list[bytes]:
@@ -1014,7 +1018,7 @@ def _run_bip39_guided_substeps(
                 )
                 print(
                     "- "
-                    f"{pos:>3} | {block_colored} | {ts.bright_white(str(step.index).rjust(6))} | {ts.orange(step.word)}"
+                    f"{pos} | {block_colored} | {ts.bright_white(str(step.index))} | {ts.orange(step.word)}"
                 )
             _print_substep_section("Resultado")
             colored_mnemonic = " ".join(
@@ -1162,15 +1166,33 @@ def _print_phase_seed_bip39(
             )
         elif index == 5:
             dev_lines = [
-                f"iteracion 0001 -> U_1  = {format_long_hex(u_values[0].hex(), groups_per_line=2)}",
-                f"iteracion 0002 -> U_2  = {format_long_hex(u_values[1].hex(), groups_per_line=2)}",
-                f"iteracion 0003 -> U_3  = {format_long_hex(u_values[2].hex(), groups_per_line=2)}",
-                "...",
-                "2042 iteraciones intermedias omitidas",
-                "...",
-                f"iteracion 2046 -> U_2046 = {format_long_hex(u_values[2045].hex(), groups_per_line=2)}",
-                f"iteracion 2047 -> U_2047 = {format_long_hex(u_values[2046].hex(), groups_per_line=2)}",
-                f"iteracion 2048 -> U_2048 = {format_long_hex(u_values[2047].hex(), groups_per_line=2)}",
+                _as_multiline_block(
+                    ts.bright_white("iteracion 0001 -> U_1"),
+                    format_long_hex(u_values[0].hex(), groups_per_line=2),
+                ),
+                _as_multiline_block(
+                    ts.bright_white("iteracion 0002 -> U_2"),
+                    format_long_hex(u_values[1].hex(), groups_per_line=2),
+                ),
+                _as_multiline_block(
+                    ts.bright_white("iteracion 0003 -> U_3"),
+                    format_long_hex(u_values[2].hex(), groups_per_line=2),
+                ),
+                ts.bright_white("..."),
+                ts.bright_white("2042 iteraciones intermedias omitidas"),
+                ts.bright_white("..."),
+                _as_multiline_block(
+                    ts.bright_white("iteracion 2046 -> U_2046"),
+                    format_long_hex(u_values[2045].hex(), groups_per_line=2),
+                ),
+                _as_multiline_block(
+                    ts.bright_white("iteracion 2047 -> U_2047"),
+                    format_long_hex(u_values[2046].hex(), groups_per_line=2),
+                ),
+                _as_multiline_block(
+                    ts.bright_white("iteracion 2048 -> U_2048"),
+                    format_long_hex(u_values[2047].hex(), groups_per_line=2),
+                ),
                 ts.formula("T_1 = U_1 XOR U_2 XOR ... XOR U_2048"),
                 ts.formula("len(seed) = 64 bytes"),
             ]
@@ -1216,8 +1238,10 @@ def _print_phase_seed_bip39(
                 math=[ts.formula("DK = T_1")],
                 substitution=[ts.formula("seed = PBKDF2(..., dklen=64) = T_1")],
                 development=[
-                    "seed final (hex agrupado):\n"
-                    + _colorize(format_long_hex(seed_display), COLOR_SEED),
+                    _as_multiline_block(
+                        "seed final (hex agrupado)",
+                        _colorize(format_long_hex(seed_display), COLOR_SEED),
+                    ),
                 ],
                 result=[
                     f"seed (hex, 64 bytes) = {_colorize(seed_display, COLOR_SEED)}"
@@ -1291,8 +1315,10 @@ def _print_phase_master_bip32(
                 math=[ts.formula("mensaje = seed")],
                 substitution=[ts.formula("len(seed) = 64")],
                 development=[
-                    "seed agrupada:\n"
-                    + _colorize(format_long_hex(seed_hex), COLOR_SEED),
+                    _as_multiline_block(
+                        "seed agrupada",
+                        _colorize(format_long_hex(seed_hex), COLOR_SEED),
+                    ),
                 ],
                 result=["salida -> mensaje para HMAC"],
                 next_step=["Aplicar HMAC-SHA512 con clave fija 'Bitcoin seed'."],
@@ -1311,7 +1337,7 @@ def _print_phase_master_bip32(
                 development=[
                     '"Bitcoin seed" NO es la seed del usuario ni contrasena; es cadena ASCII fija BIP32.',
                     "Sirve como separacion de dominio estandar.",
-                    "I (hex, 64 bytes):\n" + i_colored,
+                    _as_multiline_block("I (hex, 64 bytes)", i_colored),
                 ],
                 result=["salida -> I para particionar"],
                 next_step=["Partir I en IL (izq) y IR (der)."],
@@ -1348,7 +1374,12 @@ def _print_phase_master_bip32(
                     ts.formula("xprv_payload = version||depth||fp||child||IR||00||IL")
                 ],
                 substitution=[ts.formula("version=0488ade4")],
-                development=[_colorize(format_long_hex(xprv_payload), COLOR_XPRV)],
+                development=[
+                    _as_multiline_block(
+                        "payload xprv (hex)",
+                        _colorize(format_long_hex(xprv_payload), COLOR_XPRV),
+                    )
+                ],
                 result=["salida -> payload xprv"],
                 next_step=["Construir payload equivalente para xpub."],
             )
@@ -1362,7 +1393,12 @@ def _print_phase_master_bip32(
                     ts.formula("xpub_payload = version||depth||fp||child||IR||pubkey")
                 ],
                 substitution=[ts.formula("version=0488b21e")],
-                development=[_colorize(format_long_hex(xpub_payload), COLOR_XPUB)],
+                development=[
+                    _as_multiline_block(
+                        "payload xpub (hex)",
+                        _colorize(format_long_hex(xpub_payload), COLOR_XPUB),
+                    )
+                ],
                 result=["salida -> payload xpub"],
                 next_step=["Codificar ambos payloads en Base58Check."],
             )
@@ -1412,7 +1448,7 @@ def _print_phase_hd_path(
     ]
     for i, label in enumerate(level_labels):
         value = route_tokens[i] if i < len(route_tokens) else "(no aplica)"
-        table_lines.append(f"{i:>5} | {value:<7} | {label}")
+        table_lines.append(f"{i} | {value} | {label}")
 
     derivation_log: list[str] = []
     if not parsed:
@@ -1577,14 +1613,17 @@ def _print_phase_address(
                 math=[ts.formula("pubkey = point(k_child)")],
                 substitution=[ts.formula("len(pubkey)=33")],
                 development=[
-                    _colorize(
-                        format_long_hex(
-                            _display_sensitive(
-                                p2wpkh.compressed_pubkey.hex(),
-                                show_secrets=show_secrets,
-                            )
+                    _as_multiline_block(
+                        "pubkey comprimida (hex)",
+                        _colorize(
+                            format_long_hex(
+                                _display_sensitive(
+                                    p2wpkh.compressed_pubkey.hex(),
+                                    show_secrets=show_secrets,
+                                )
+                            ),
+                            COLOR_XPUB,
                         ),
-                        COLOR_XPUB,
                     )
                 ],
                 result=["salida -> pubkey comprimida"],
@@ -1598,7 +1637,12 @@ def _print_phase_address(
                 inputs=["pubkey comprimida"],
                 math=[ts.formula("hash160 = RIPEMD160(SHA256(pubkey))")],
                 substitution=[ts.formula("len(hash160)=20")],
-                development=[_colorize(format_long_hex(hash160_hex), COLOR_IR)],
+                development=[
+                    _as_multiline_block(
+                        "hash160 (hex)",
+                        _colorize(format_long_hex(hash160_hex), COLOR_IR),
+                    )
+                ],
                 result=["salida -> hash160"],
                 next_step=["Formar witness program v0."],
             )
@@ -1660,10 +1704,8 @@ def _print_phase_address(
                 inputs=["pubkey + network + witness"],
                 math=[ts.formula("final_address = P2WPKH(pubkey, network)")],
                 substitution=[ts.formula(p2wpkh.address)],
-                development=[_colorize(p2wpkh.address, COLOR_FINAL_ADDRESS)],
-                result=[
-                    f"direccion final = {_colorize(p2wpkh.address, COLOR_FINAL_ADDRESS)}"
-                ],
+                development=[ts.bright_white(p2wpkh.address)],
+                result=[f"direccion final = {ts.bright_white(p2wpkh.address)}"],
                 next_step=["Salida hacia resumen final del wizard."],
             )
         action = _prompt_substep_transition(pause_between_steps=interactive_micro_steps)
@@ -1694,33 +1736,74 @@ def _print_phase_final_summary(
     colored_mnemonic = " ".join(
         _colorize(word, COLOR_WORD) for word in mnemonic.split()
     )
-    print(f"- mnemonic = {colored_mnemonic}")
+    print()
+    print("- mnemonic =")
+    print(colored_mnemonic)
+    print()
+    print("- passphrase =")
     print(
-        f"- passphrase = {_colorize(_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets), COLOR_PASSPHRASE)}"
+        _colorize(
+            _display_sensitive(passphrase or "(vacia)", show_secrets=show_secrets),
+            COLOR_PASSPHRASE,
+        )
     )
-    print(f"- path = {path}")
-    print(f"- network = {network}")
+    print()
+    print("- path =")
+    print(path)
+    print()
+    print("- network =")
+    print(network)
 
     print()
     print(ts.bright_white("Outputs clave:"))
+    print()
+    print("- seed =")
     print(
-        f"- seed = {_colorize(_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED)}"
+        _colorize(
+            _display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED
+        )
     )
+    print()
+    print("- IL master =")
     print(
-        f"- IL master = {_colorize(_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets), COLOR_IL)}"
+        _colorize(
+            _display_sensitive(
+                master.master_private_key.hex(), show_secrets=show_secrets
+            ),
+            COLOR_IL,
+        )
     )
+    print()
+    print("- IR master =")
     print(
-        f"- IR master = {_colorize(_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets), COLOR_IR)}"
+        _colorize(
+            _display_sensitive(master.chain_code.hex(), show_secrets=show_secrets),
+            COLOR_IR,
+        )
     )
+    print()
+    print("- xprv master =")
     print(
-        f"- xprv master = {_colorize(_display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
+        _colorize(
+            _display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV
+        )
     )
-    print(f"- xpub master = {_colorize(master.xpub, COLOR_XPUB)}")
+    print()
+    print("- xpub master =")
+    print(_colorize(master.xpub, COLOR_XPUB))
+    print()
+    print("- xprv derivado =")
     print(
-        f"- xprv derivado = {_colorize(_display_sensitive(derived.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
+        _colorize(
+            _display_sensitive(derived.xprv, show_secrets=show_secrets), COLOR_XPRV
+        )
     )
-    print(f"- xpub derivado = {_colorize(derived.xpub, COLOR_XPUB)}")
-    print(f"- direccion final = {_colorize(final_addr.address, COLOR_FINAL_ADDRESS)}")
+    print()
+    print("- xpub derivado =")
+    print(_colorize(derived.xpub, COLOR_XPUB))
+    print()
+    print("- direccion final =")
+    print(_colorize(final_addr.address, COLOR_FINAL_ADDRESS))
 
     print()
     print(ts.warning("ADVERTENCIA:"))
@@ -1921,6 +2004,8 @@ def _run_interactive(
                 return 0
             state.update(seed_artifacts)
             print("\nEtapa 2/5 completada: seed BIP39 derivada")
+            stage_index += 1
+            continue
 
         elif stage_index == 2:
             try:
@@ -1934,6 +2019,8 @@ def _run_interactive(
                 return 0
             state.update(master_artifacts)
             print("\nEtapa 3/5 completada: master BIP32 derivada")
+            stage_index += 1
+            continue
 
         elif stage_index == 3:
             network = "mainnet" if no_pause else _prompt_network()
@@ -1956,6 +2043,8 @@ def _run_interactive(
                 return 0
             state.update(path_artifacts)
             print("\nEtapa 4/5 completada: ruta HD derivada")
+            stage_index += 1
+            continue
 
         else:
             try:
@@ -1981,12 +2070,6 @@ def _run_interactive(
                 show_secrets=True,
             )
             print("\nEtapa 5/5 completada: direccion y resumen final")
-
-        action = "continue" if no_pause else _prompt_continue_with_options()
-        if action == "cancel":
-            print("Flujo cancelado por usuario. Salida limpia.")
-            return 0
-        if action == "continue":
             stage_index += 1
 
     return 0
