@@ -342,6 +342,47 @@ def _prompt_show_secrets() -> bool:
     return True
 
 
+def _run_bip39_guided_substeps(breakdown) -> str:
+    """Render BIP39 didactic substeps with S/N confirmation.
+
+    Returns: continue | retry | cancel
+    """
+
+    substeps = [
+        ("Subpaso BIP39 1/5: Entropia", _print_stage_entropy),
+        ("Subpaso BIP39 2/5: Checksum", _print_stage_checksum),
+        ("Subpaso BIP39 3/5: Bits combinados", _print_stage_combined_bits),
+        ("Subpaso BIP39 4/5: Indices (bloques de 11 bits)", _print_stage_indices),
+        ("Subpaso BIP39 5/5: Mnemotecnica", _print_stage_mnemonic),
+    ]
+
+    index = 0
+    while index < len(substeps):
+        title, printer = substeps[index]
+        print(f"\n{title}")
+        printer(breakdown)
+
+        action = _prompt_continue_with_options()
+        if action == "cancel":
+            return "cancel"
+        if action == "retry":
+            continue
+        index += 1
+
+    return "continue"
+
+
+def _print_manual_mnemonic_limit_note() -> None:
+    print("\nSubpaso BIP39 (entrada manual de mnemotecnica)")
+    print(
+        "No se puede reconstruir de forma fiable la entropia/checksum/bloques de 11 bits ORIGINALES "
+        "a partir de solo la mnemotecnica ingresada."
+    )
+    print(
+        "Alternativa educativa: continuar desde mnemotecnica -> seed -> BIP32 -> ruta -> direccion."
+    )
+
+
 def _print_detailed_breakdown(breakdown) -> None:
     _print_stage_entropy(breakdown)
     print()
@@ -379,6 +420,38 @@ def _run_interactive(wordlist: list[str]) -> int:
             print("\nEtapa 1/5 completada: origen seleccionado")
             print(f"- Origen: {source_label}")
             print(f"- Mnemotecnica: {mnemonic}")
+
+            if entropy is not None:
+                try:
+                    breakdown = build_bip39_breakdown(entropy, wordlist)
+                except ValueError as exc:
+                    print(
+                        _error_message(
+                            "DOMINIO BIP39",
+                            f"validacion de reglas BIP39 fallida ({exc})",
+                            "revisa la entropia y la integridad de la wordlist",
+                        ),
+                        file=sys.stderr,
+                    )
+                    return 4
+
+                b39_action = _run_bip39_guided_substeps(breakdown)
+                if b39_action == "cancel":
+                    print("Flujo cancelado por usuario. Salida limpia.")
+                    return 0
+                if b39_action == "retry":
+                    continue
+            else:
+                _print_manual_mnemonic_limit_note()
+                b39_action = _prompt_continue_with_options()
+                if b39_action == "cancel":
+                    print("Flujo cancelado por usuario. Salida limpia.")
+                    return 0
+                if b39_action == "retry":
+                    continue
+
+            stage_index += 1
+            continue
 
         elif stage_index == 1:
             passphrase = _prompt_passphrase()

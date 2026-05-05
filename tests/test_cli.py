@@ -192,6 +192,10 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
         [
             "a",
             "s",
+            "s",
+            "s",
+            "s",
+            "s",
             "",
             "s",
             "mainnet",
@@ -211,6 +215,9 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
     assert captured.err == ""
     assert "wizard guiado 11.2" in captured.out
     assert "Etapa 1/5 completada: origen seleccionado" in captured.out
+    assert "Subpaso BIP39 1/5: Entropia" in captured.out
+    assert "Subpaso BIP39 4/5: Indices (bloques de 11 bits)" in captured.out
+    assert "Subpaso BIP39 5/5: Mnemotecnica" in captured.out
     assert "Modo: Full Journey E2E (educativo guiado)" in captured.out
     assert "Red:                 mainnet (bc)" in captured.out
 
@@ -224,6 +231,10 @@ def test_cli_interactive_guided_retries_invalid_inputs(capsys, monkeypatch) -> N
             "e",
             "zzzz",
             "00000000000000000000000000000000",
+            "s",
+            "s",
+            "s",
+            "s",
             "s",
             "",
             "s",
@@ -252,6 +263,7 @@ def test_cli_interactive_guided_retries_invalid_inputs(capsys, monkeypatch) -> N
     assert "Entrada invalida. Escribe mainnet o testnet." in captured.out
     assert "Ruta BIP32 invalida" in captured.out
     assert "Revelacion cancelada. Se mantiene redaccion de secretos." in captured.out
+    assert "Subpaso BIP39 2/5: Checksum" in captured.out
     assert "Red:                 testnet (tb)" in captured.out
 
 
@@ -270,6 +282,39 @@ def test_cli_interactive_guided_continue_no_can_cancel_flow(
     assert captured.err == ""
     assert "Flujo cancelado por usuario. Salida limpia." in captured.out
     assert "Modo: Full Journey E2E" not in captured.out
+
+
+def test_cli_interactive_guided_manual_mnemonic_explains_bip39_limit(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["seed-steps", "--wizard"])
+
+    inputs = iter(
+        [
+            "m",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "s",
+            "",
+            "s",
+            "mainnet",
+            "s",
+            "d",
+            "s",
+            "n",
+            "s",
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert (
+        "No se puede reconstruir de forma fiable la entropia/checksum/bloques de 11 bits ORIGINALES"
+        in captured.out
+    )
 
 
 def test_cli_derives_seed_from_explicit_mnemonic(capsys, monkeypatch) -> None:

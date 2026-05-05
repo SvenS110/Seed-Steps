@@ -57,6 +57,13 @@ Desde HITO 11.2, este wizard es GUIADO por etapas con validacion y confirmacion 
 - Al cerrar cada etapa: `Continuar al siguiente paso? (S/N)`.
 - Si respondes `N`: puedes `[C]ancelar flujo` o `[E]ditar` esa etapa y reintentar.
 
+Correccion 11.2.1 (didactica BIP39 restaurada):
+
+- Si eliges origen por entropia (auto/manual), el wizard vuelve a mostrar la fase BIP39 completa por subpasos:
+  `Entropia -> Checksum -> Bits combinados -> Bloques de 11 bits/Indices -> Mnemotecnica`.
+- Cada subpaso BIP39 tambien pide confirmacion S/N para continuar.
+- Si eliges mnemotecnica manual, el wizard explica explicitamente que no puede reconstruir de forma fiable la entropia/checksum/bloques originales desde solo esa entrada.
+
 Alias equivalente:
 
 ```bash
