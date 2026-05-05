@@ -40,6 +40,18 @@ Modo compacto (sin tabla detallada por palabra):
 seed-steps --entropy 00000000000000000000000000000000 --compact
 ```
 
+Modo wizard interactivo paso a paso:
+
+```bash
+seed-steps --interactive
+```
+
+Alias equivalente:
+
+```bash
+seed-steps --wizard
+```
+
 Ejecucion como modulo (equivalente):
 
 ```bash

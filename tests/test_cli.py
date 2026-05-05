@@ -183,3 +183,54 @@ def test_cli_fails_with_domain_validation_error(capsys, monkeypatch) -> None:
         expected_type="DOMINIO BIP39",
     )
     assert "2048 palabras" in captured.err
+
+
+def test_cli_interactive_auto_mode_guides_all_stages(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["seed-steps", "--interactive"])
+
+    inputs = iter(["a", "", "", "", "", ""])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Bienvenido al modo wizard de Seed Steps." in captured.out
+    assert "1. Entropia" in captured.out
+    assert "2. Checksum" in captured.out
+    assert "3. Bits combinados" in captured.out
+    assert "4. Indices" in captured.out
+    assert "5. Mnemotecnica" in captured.out
+
+
+def test_cli_interactive_manual_entropy_retries_on_invalid_input(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["seed-steps", "--wizard"])
+
+    inputs = iter(
+        [
+            "manual",
+            "zzzz",
+            "00000000000000000000000000000000",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Entrada invalida:" in captured.out
+    assert "Entropia (hex):      00000000000000000000000000000000" in captured.out
+    assert (
+        "Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        in captured.out
+    )

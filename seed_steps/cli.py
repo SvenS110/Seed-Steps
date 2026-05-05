@@ -31,6 +31,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Compact output with only key metrics and final mnemonic.",
     )
+    parser.add_argument(
+        "--interactive",
+        "--wizard",
+        dest="interactive",
+        action="store_true",
+        help="Inicia un asistente interactivo paso a paso.",
+    )
     return parser
 
 
@@ -39,38 +46,37 @@ def _print_header() -> None:
     print("=" * 44)
 
 
-def _print_detailed_breakdown(breakdown) -> None:
-    entropy_bit_count = len(breakdown.entropy_bits)
-    checksum_bit_count = len(breakdown.checksum_bits)
-    total_bit_count = len(breakdown.entropy_plus_checksum_bits)
-    word_count = len(breakdown.steps)
-
+def _print_stage_entropy(breakdown) -> None:
     print("1. Entropia")
     print("   Por que: Es la fuente de aleatoriedad que determina toda la semilla.")
     print(f"   Entropia (hex):      {breakdown.entropy_hex}")
     print(f"   Entropia (bits):     {group_binary(breakdown.entropy_bits, 8)}")
-    print(f"   Tamano de entropia:  {entropy_bit_count} bits")
-    print()
+    print(f"   Tamano de entropia:  {len(breakdown.entropy_bits)} bits")
 
+
+def _print_stage_checksum(breakdown) -> None:
     print("2. Checksum")
     print("   Por que: Detecta errores al escribir o transcribir la mnemotecnica.")
     print(f"   SHA256(entropia):    {breakdown.sha256_hex}")
     print(f"   Bits de checksum:    {breakdown.checksum_bits}")
-    print(f"   Tamano checksum:     {checksum_bit_count} bits")
-    print()
+    print(f"   Tamano checksum:     {len(breakdown.checksum_bits)} bits")
 
+
+def _print_stage_combined_bits(breakdown) -> None:
     print("3. Bits combinados")
     print("   Por que: BIP39 une entropia y checksum antes de partir en bloques de 11.")
     print(f"   Entropia+checksum:   {breakdown.entropy_plus_checksum_bits}")
-    print(f"   Total de bits:       {total_bit_count} bits")
-    print()
+    print(f"   Total de bits:       {len(breakdown.entropy_plus_checksum_bits)} bits")
 
+
+def _print_stage_indices(breakdown) -> None:
     print("4. Indices")
     print("   Por que: Cada bloque de 11 bits apunta a una palabra en la lista BIP39.")
     print(f"   Bloques de 11 bits:  {' | '.join(breakdown.bit_blocks)}")
-    print(f"   Numero de palabras:  {word_count}")
-    print()
+    print(f"   Numero de palabras:  {len(breakdown.steps)}")
 
+
+def _print_stage_mnemonic(breakdown) -> None:
     print("5. Mnemotecnica")
     print("   Por que: Es la representacion humana de la semilla binaria.")
     print("   Tabla por palabra:")
@@ -81,6 +87,79 @@ def _print_detailed_breakdown(breakdown) -> None:
             f"   {step.position:>3} | {step.bit_block} | {step.index:>6} | {step.word}"
         )
     print(f"\nMnemonic: {breakdown.mnemonic}")
+
+
+def _prompt_continue() -> None:
+    input("\nPresiona Enter para continuar... ")
+
+
+def _prompt_entropy_choice() -> bytes:
+    while True:
+        choice = (
+            input("\nComo quieres la entropia? [A]utomatica / [M]anual: ")
+            .strip()
+            .lower()
+        )
+
+        if choice in {"a", "auto", "automatica", "automatic"}:
+            return generate_entropy(16)
+
+        if choice in {"m", "manual"}:
+            while True:
+                entropy_hex = input(
+                    "Ingresa entropy hex (128/160/192/224/256 bits): "
+                ).strip()
+                try:
+                    return parse_entropy_hex(entropy_hex)
+                except ValueError as exc:
+                    print(f"Entrada invalida: {exc}. Intenta nuevamente.")
+
+        print("Opcion invalida. Escribe A para automatica o M para manual.")
+
+
+def _print_detailed_breakdown(breakdown) -> None:
+    _print_stage_entropy(breakdown)
+    print()
+    _print_stage_checksum(breakdown)
+    print()
+    _print_stage_combined_bits(breakdown)
+    print()
+    _print_stage_indices(breakdown)
+    print()
+    _print_stage_mnemonic(breakdown)
+
+
+def _run_interactive(wordlist: list[str]) -> int:
+    _print_header()
+    print("Bienvenido al modo wizard de Seed Steps.")
+    print("Veras cada etapa de BIP39 y avanzaras cuando presiones Enter.")
+
+    entropy = _prompt_entropy_choice()
+
+    try:
+        breakdown = build_bip39_breakdown(entropy, wordlist)
+    except ValueError as exc:
+        print(
+            _error_message(
+                "DOMINIO BIP39",
+                f"validacion de reglas BIP39 fallida ({exc})",
+                "revisa la entropia y la integridad de la wordlist",
+            ),
+            file=sys.stderr,
+        )
+        return 4
+
+    _prompt_continue()
+    _print_stage_entropy(breakdown)
+    _prompt_continue()
+    _print_stage_checksum(breakdown)
+    _prompt_continue()
+    _print_stage_combined_bits(breakdown)
+    _prompt_continue()
+    _print_stage_indices(breakdown)
+    _prompt_continue()
+    _print_stage_mnemonic(breakdown)
+    return 0
 
 
 def _print_compact_breakdown(breakdown) -> None:
@@ -97,21 +176,6 @@ def _print_compact_breakdown(breakdown) -> None:
 def run() -> int:
     parser = build_parser()
     args = parser.parse_args()
-
-    try:
-        entropy = (
-            parse_entropy_hex(args.entropy) if args.entropy else generate_entropy(16)
-        )
-    except ValueError as exc:
-        print(
-            _error_message(
-                "ENTRADA",
-                f"valor invalido en --entropy ({exc})",
-                "usa un hexadecimal valido de 128/160/192/224/256 bits",
-            ),
-            file=sys.stderr,
-        )
-        return 2
 
     wordlist_path = files("seed_steps").joinpath("data/english.txt")
 
@@ -138,6 +202,24 @@ def run() -> int:
             file=sys.stderr,
         )
         return 3
+
+    if args.interactive:
+        return _run_interactive(wordlist)
+
+    try:
+        entropy = (
+            parse_entropy_hex(args.entropy) if args.entropy else generate_entropy(16)
+        )
+    except ValueError as exc:
+        print(
+            _error_message(
+                "ENTRADA",
+                f"valor invalido en --entropy ({exc})",
+                "usa un hexadecimal valido de 128/160/192/224/256 bits",
+            ),
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         breakdown = build_bip39_breakdown(entropy, wordlist)
