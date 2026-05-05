@@ -23,6 +23,7 @@ from seed_steps.bip39 import build_bip39_breakdown, load_wordlist
 from seed_steps.entropy import generate_entropy, parse_entropy_hex
 from seed_steps.format import group_binary
 from seed_steps.seed import build_bip39_seed_salt, derive_bip39_seed
+from seed_steps.trace import MathTrace
 
 
 def _error_message(error_type: str, cause: str, guide: str) -> str:
@@ -125,6 +126,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="interactive",
         action="store_true",
         help="Inicia un asistente interactivo paso a paso.",
+    )
+    parser.add_argument(
+        "--no-pause",
+        action="store_true",
+        help="En wizard, desactiva pausas y confirmaciones entre pasos.",
     )
     parser.add_argument(
         "--mnemonic",
@@ -296,6 +302,158 @@ def _print_stage_mnemonic_colored(breakdown) -> None:
 
 def _prompt_continue() -> None:
     input("\nPresiona Enter para continuar... ")
+
+
+def _render_math_trace(trace: MathTrace) -> None:
+    print(f"\n{trace.titulo}")
+    print("   Que es")
+    print(f"   - {trace.que_es}")
+    print("   Por que se hace")
+    print(f"   - {trace.por_que}")
+    print("   Datos de entrada")
+    for item in trace.datos_entrada:
+        print(f"   - {item}")
+    print("   Matematica")
+    for item in trace.formulas:
+        print(f"   - {item}")
+    print("   Desarrollo")
+    for item in trace.sustituciones:
+        print(f"   - {item}")
+    for item in trace.desarrollo_intermedio:
+        print(f"   - {item}")
+    print("   Resultado")
+    for item in trace.resultados:
+        print(f"   - {item}")
+    if trace.nota_tecnica:
+        print("   Nota")
+        print(f"   - {trace.nota_tecnica}")
+
+
+def _build_bip39_math_traces(breakdown) -> list[MathTrace]:
+    ent = len(breakdown.entropy_bits)
+    cs = len(breakdown.checksum_bits)
+    sha256_bits = bin(int(breakdown.sha256_hex, 16))[2:].zfill(256)
+    last_block = breakdown.bit_blocks[-1]
+    last_index = breakdown.steps[-1].index
+    last_word = breakdown.steps[-1].word
+    return [
+        MathTrace(
+            titulo="Traza 1) Entropia de entrada",
+            que_es="El valor binario inicial del cual nace la mnemotecnica BIP39.",
+            por_que="Sin ENT no existe pipeline; todo calculo posterior depende de estos bits.",
+            datos_entrada=[f"entropy_hex = {breakdown.entropy_hex}"],
+            formulas=["ENT(bits) = len(entropy_bytes) * 8"],
+            sustituciones=[f"ENT = {len(breakdown.entropy_hex) // 2} * 8"],
+            resultados=[
+                f"ENT = {ent} bits",
+                f"entropy_bits = {breakdown.entropy_bits}",
+            ],
+        ),
+        MathTrace(
+            titulo="Traza 2) Bytes -> bits",
+            que_es="Transformacion de cada byte a su representacion binaria de 8 bits.",
+            por_que="BIP39 opera sobre cadenas de bits, no sobre texto hexadecimal.",
+            datos_entrada=[f"entropy_bytes = {len(breakdown.entropy_hex) // 2}"],
+            formulas=["entropy_bits = concat(format(byte, '08b') para cada byte)"],
+            sustituciones=["Para 00h: format(0, '08b') = 00000000"],
+            desarrollo_intermedio=[
+                f"{len(breakdown.entropy_hex) // 2} bytes x 8 = {ent} bits"
+            ],
+            resultados=[f"entropy_bits = {breakdown.entropy_bits}"],
+        ),
+        MathTrace(
+            titulo="Traza 3) Longitud ENT",
+            que_es="Medida oficial de bits de entropia permitida por BIP39.",
+            por_que="Determina directamente checksum y cantidad de palabras.",
+            datos_entrada=[f"entropy_bits_len = {ent}"],
+            formulas=["ENT in {128,160,192,224,256}"],
+            sustituciones=[f"ENT = {ent}"],
+            resultados=[f"ENT = {ent} bits"],
+        ),
+        MathTrace(
+            titulo="Traza 4) Longitud checksum",
+            que_es="Cantidad de bits de checksum que se anexan a la entropia.",
+            por_que="Permite detectar errores de transcripcion de la frase.",
+            datos_entrada=[f"ENT = {ent} bits"],
+            formulas=["CS = ENT / 32"],
+            sustituciones=[f"CS = {ent} / 32"],
+            resultados=[f"CS = {cs} bits"],
+        ),
+        MathTrace(
+            titulo="Traza 5) SHA256(entropia)",
+            que_es="Hash criptografico de 256 bits calculado sobre la entropia cruda.",
+            por_que="BIP39 toma el prefijo de este hash como checksum oficial.",
+            datos_entrada=[f"entropy_hex = {breakdown.entropy_hex}"],
+            formulas=["digest = SHA256(entropy)"],
+            sustituciones=[f"SHA256({breakdown.entropy_hex})"],
+            resultados=[f"digest_hex = {breakdown.sha256_hex}"],
+        ),
+        MathTrace(
+            titulo="Traza 6) Extraccion checksum",
+            que_es="Recorte de los primeros CS bits del digest SHA256.",
+            por_que="Es la regla exacta definida por BIP39 para checksum.",
+            datos_entrada=[f"sha256_bits = {sha256_bits}", f"CS = {cs}"],
+            formulas=["checksum = sha256_bits[0:CS]"],
+            sustituciones=[f"checksum = sha256_bits[0:{cs}]"],
+            resultados=[f"checksum = {breakdown.checksum_bits}"],
+        ),
+        MathTrace(
+            titulo="Traza 7) Concatenacion ENT+CS",
+            que_es="Union de bits de entropia y bits de checksum en un solo flujo.",
+            por_que="Es el insumo directo para partir en bloques de 11 bits.",
+            datos_entrada=[
+                f"entropy_bits ({ent})",
+                f"checksum_bits ({cs}) = {breakdown.checksum_bits}",
+            ],
+            formulas=["total_bits = entropy_bits + checksum_bits"],
+            sustituciones=[f"total = {ent} + {cs}"],
+            resultados=[
+                f"total_bits = {ent + cs}",
+                f"entropy_plus_checksum = {breakdown.entropy_plus_checksum_bits}",
+            ],
+        ),
+        MathTrace(
+            titulo="Traza 8) Division en bloques de 11 bits",
+            que_es="Particionado del flujo total en segmentos fijos de 11 bits.",
+            por_que="Cada segmento representa un indice de wordlist (0..2047).",
+            datos_entrada=[f"total_bits = {ent + cs}"],
+            formulas=["num_words = (ENT + CS) / 11"],
+            sustituciones=[f"num_words = ({ent} + {cs}) / 11"],
+            resultados=[
+                f"num_words = {len(breakdown.bit_blocks)}",
+                f"bloques = {' | '.join(breakdown.bit_blocks)}",
+            ],
+        ),
+        MathTrace(
+            titulo="Traza 9) Bloques -> indices",
+            que_es="Conversion binario->entero para cada bloque de 11 bits.",
+            por_que="El entero resultante indexa directamente la wordlist BIP39.",
+            datos_entrada=[f"ultimo_bloque = {last_block}"],
+            formulas=["indice = int(bloque_11_bits, 2)"],
+            sustituciones=[f"indice = int({last_block}, 2)"],
+            resultados=[f"indice = {last_index}"],
+        ),
+        MathTrace(
+            titulo="Traza 10) Indice -> palabra",
+            que_es="Lookup del indice en la wordlist inglesa de 2048 palabras.",
+            por_que="Mapea numero tecnico a palabra memorizable por humanos.",
+            datos_entrada=[f"indice = {last_index}"],
+            formulas=["palabra = wordlist[indice]"],
+            sustituciones=[f"wordlist[{last_index}]"],
+            resultados=[f"wordlist[{last_index}] = {last_word}"],
+        ),
+        MathTrace(
+            titulo="Traza 11) Mnemotecnica final",
+            que_es="Frase final de palabras unidas en orden de bloques.",
+            por_que="Es la representacion portable para recrear seed y arbol HD.",
+            datos_entrada=[f"palabras = {len(breakdown.steps)}"],
+            formulas=["mnemonic = ' '.join(palabras_ordenadas)"],
+            sustituciones=["join(lista_palabras)"],
+            resultados=[f"Mnemonic: {breakdown.mnemonic}"],
+            nota_tecnica="NO usar esta salida con fondos reales.",
+            sensitive=True,
+        ),
+    ]
 
 
 def _prompt_entropy_choice() -> bytes:
@@ -478,7 +636,11 @@ def _prompt_show_secrets() -> bool:
 
 
 def _run_bip39_guided_substeps(
-    breakdown, *, source_label: str, selected_entropy_bits: int | None
+    breakdown,
+    *,
+    source_label: str,
+    selected_entropy_bits: int | None,
+    pause_between_steps: bool,
 ) -> str:
     """Render BIP39 didactic substeps with S/N confirmation.
 
@@ -533,12 +695,21 @@ def _run_bip39_guided_substeps(
                 "   Que debes observar: el orden de palabras depende exactamente del orden de bloques."
             )
 
-        action = _prompt_continue_with_options()
+        action = (
+            "continue" if not pause_between_steps else _prompt_continue_with_options()
+        )
         if action == "cancel":
             return "cancel"
         if action == "retry":
             continue
         index += 1
+
+    for trace in _build_bip39_math_traces(breakdown):
+        _render_math_trace(trace)
+        if pause_between_steps:
+            action = _prompt_continue_with_options()
+            if action == "cancel":
+                return "cancel"
 
     return "continue"
 
@@ -1004,7 +1175,9 @@ def _print_detailed_breakdown(breakdown) -> None:
     _print_stage_mnemonic(breakdown)
 
 
-def _run_interactive(wordlist: list[str]) -> int:
+def _run_interactive(
+    wordlist: list[str], *, preset_entropy: bytes | None = None, no_pause: bool = False
+) -> int:
     _print_header()
     print("Bienvenido a Seed Steps by SvenS101")
     print(
@@ -1031,9 +1204,16 @@ def _run_interactive(wordlist: list[str]) -> int:
     stage_index = 0
     while stage_index < 5:
         if stage_index == 0:
-            entropy, mnemonic, source_label, selected_entropy_bits = (
-                _prompt_source_choice(wordlist)
-            )
+            if preset_entropy is not None:
+                entropy = preset_entropy
+                breakdown = build_bip39_breakdown(entropy, wordlist)
+                mnemonic = breakdown.mnemonic
+                source_label = "entropia manual (--entropy)"
+                selected_entropy_bits = len(entropy) * 8
+            else:
+                entropy, mnemonic, source_label, selected_entropy_bits = (
+                    _prompt_source_choice(wordlist)
+                )
             state["entropy"] = entropy
             state["mnemonic"] = mnemonic
             state["source_label"] = source_label
@@ -1043,29 +1223,33 @@ def _run_interactive(wordlist: list[str]) -> int:
             print(f"- Mnemotecnica: {mnemonic}")
 
             if entropy is not None:
-                try:
-                    breakdown = build_bip39_breakdown(entropy, wordlist)
-                except ValueError as exc:
-                    print(
-                        _error_message(
-                            "DOMINIO BIP39",
-                            f"validacion de reglas BIP39 fallida ({exc})",
-                            "revisa la entropia y la integridad de la wordlist",
-                        ),
-                        file=sys.stderr,
-                    )
-                    return 4
+                if preset_entropy is None:
+                    try:
+                        breakdown = build_bip39_breakdown(entropy, wordlist)
+                    except ValueError as exc:
+                        print(
+                            _error_message(
+                                "DOMINIO BIP39",
+                                f"validacion de reglas BIP39 fallida ({exc})",
+                                "revisa la entropia y la integridad de la wordlist",
+                            ),
+                            file=sys.stderr,
+                        )
+                        return 4
 
                 b39_action = _run_bip39_guided_substeps(
                     breakdown,
                     source_label=source_label,
                     selected_entropy_bits=selected_entropy_bits,
+                    pause_between_steps=not no_pause,
                 )
                 if b39_action == "cancel":
                     print("Flujo cancelado por usuario. Salida limpia.")
                     return 0
                 if b39_action == "retry":
                     continue
+                if no_pause:
+                    return 0
             else:
                 _print_manual_mnemonic_limit_note()
                 b39_action = _prompt_continue_with_options()
@@ -1132,7 +1316,7 @@ def _run_interactive(wordlist: list[str]) -> int:
             )
             print("\nEtapa 5/5 completada: direccion y resumen final")
 
-        action = _prompt_continue_with_options()
+        action = "continue" if no_pause else _prompt_continue_with_options()
         if action == "cancel":
             print("Flujo cancelado por usuario. Salida limpia.")
             return 0
@@ -1559,7 +1743,25 @@ def run() -> int:
         return 3
 
     if args.interactive:
-        return _run_interactive(wordlist)
+        preset_entropy = None
+        if args.entropy:
+            try:
+                preset_entropy = parse_entropy_hex(args.entropy)
+            except ValueError as exc:
+                print(
+                    _error_message(
+                        "ENTRADA",
+                        f"valor invalido en --entropy ({exc})",
+                        "usa un hexadecimal valido de 128/160/192/224/256 bits",
+                    ),
+                    file=sys.stderr,
+                )
+                return 2
+        return _run_interactive(
+            wordlist,
+            preset_entropy=preset_entropy,
+            no_pause=args.no_pause,
+        )
 
     show_secrets = args.show_secrets and not args.no_secrets
     if show_secrets:

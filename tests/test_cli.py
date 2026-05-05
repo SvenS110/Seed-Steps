@@ -369,6 +369,37 @@ def test_cli_interactive_guided_manual_mnemonic_explains_bip39_limit(
     assert "Fase B) Seed BIP39" in captured.out
 
 
+def test_cli_wizard_no_pause_entropy_zero_shows_known_bip39_math_trace(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--wizard",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-pause",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert (
+        "Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        in captured.out
+    )
+    assert "Detecta errores al escribir o transcribir la mnemotecnica" in captured.out
+    assert "ENT = 128 bits" in captured.out
+    assert "CS = 4 bits" in captured.out
+    assert "checksum = 0011" in captured.out
+    assert "wordlist[3] = about" in captured.out
+
+
 def test_cli_derives_seed_from_explicit_mnemonic(capsys, monkeypatch) -> None:
     monkeypatch.setattr(
         sys,
