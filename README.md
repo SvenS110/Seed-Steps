@@ -47,7 +47,7 @@ Modo wizard interactivo paso a paso:
 seed-steps --interactive
 ```
 
-Desde HITO 11.2, este wizard es GUIADO por etapas con validacion y confirmacion S/N entre pasos:
+Desde HITO 11.3, este wizard es GUIADO por etapas con validacion y confirmacion S/N entre pasos:
 
 - Etapa 1: origen (`entropia automatica` / `entropia manual` / `mnemotecnica manual`).
 - Etapa 2: passphrase (vacia permitida).
@@ -56,6 +56,17 @@ Desde HITO 11.2, este wizard es GUIADO por etapas con validacion y confirmacion 
 - Etapa 5: politica de secretos (redactado por defecto; revelar exige advertencia + confirmacion extra).
 - Al cerrar cada etapa: `Continuar al siguiente paso? (S/N)`.
 - Si respondes `N`: puedes `[C]ancelar flujo` o `[E]ditar` esa etapa y reintentar.
+
+Homogeneizacion HITO 11.3 (pipeline completo fase por fase):
+
+- Se conserva intacta la fase BIP39 restaurada en 11.2.1 cuando el origen es entropia.
+- Luego el wizard recorre TODO el pipeline con el mismo patron didactico:
+  - Fase B: Seed BIP39 (entrada: mnemonic+passphrase, operacion: PBKDF2, salida: seed redactada por defecto).
+  - Fase C: Master BIP32 (entrada: seed, operacion: HMAC-SHA512, salida: I/IL/IR + xprv/xpub con redaccion segura).
+  - Fase D: Ruta HD (entrada: ruta, operacion: derivacion nivel por nivel, salida: nodo derivado).
+  - Fase E: Direccion (entrada: pubkey/red, operacion: HASH160+witness+bech32, salida: direccion final).
+  - Fase F: Resumen final (inputs usados + outputs clave + advertencia).
+- Entre cada fase B-F se mantiene `Continuar al siguiente paso? (S/N)` con opcion de cancelar o editar/reintentar.
 
 Correccion 11.2.1 (didactica BIP39 restaurada):
 

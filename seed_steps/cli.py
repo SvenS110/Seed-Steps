@@ -372,6 +372,199 @@ def _run_bip39_guided_substeps(breakdown) -> str:
     return "continue"
 
 
+def _print_phase_seed_bip39(
+    *, mnemonic: str, passphrase: str, show_secrets: bool
+) -> dict[str, object]:
+    seed_bytes = derive_bip39_seed(mnemonic, passphrase)
+    salt = build_bip39_seed_salt(passphrase)
+    print("\nFase B) Seed BIP39")
+    print("   Que entra:")
+    print(f"   - Mnemonic:           {mnemonic}")
+    print(
+        f"   - Passphrase:         {_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets)}"
+    )
+    print("   Que operacion se hace:")
+    print("   - PBKDF2-HMAC-SHA512, iteraciones=2048")
+    print(f"   - Salt:               {salt}")
+    print("   Que sale:")
+    print(
+        f"   - Seed (hex, 64 bytes): {_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)}"
+    )
+    return {"seed_bytes": seed_bytes, "salt": salt}
+
+
+def _print_phase_master_bip32(
+    seed_bytes: bytes, *, show_secrets: bool
+) -> dict[str, object]:
+    master = derive_bip32_master_node(seed_bytes)
+    print("\nFase C) Master BIP32")
+    print("   Que entra:")
+    print(
+        f"   - Seed:               {_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)}"
+    )
+    print("   Que operacion se hace:")
+    print("   - HMAC-SHA512('Bitcoin seed', seed)")
+    print("   Que sale:")
+    print(
+        f"   - I:                  {_display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        f"   - IL (master key):    {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        f"   - IR (chain code):    {_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        f"   - xprv:               {_display_sensitive(master.xprv, show_secrets=show_secrets)}"
+    )
+    print(f"   - xpub:               {master.xpub}")
+    return {"master": master}
+
+
+def _print_phase_hd_path(master, path: str, *, show_secrets: bool) -> dict[str, object]:
+    parsed = parse_bip32_path(path)
+    current = derive_bip32_node_from_master(master)
+    print("\nFase D) Ruta HD")
+    print("   Que entra:")
+    print(f"   - Ruta:               {path}")
+    print("   Que operacion se hace:")
+    print("   - Derivacion nivel por nivel")
+    if not parsed:
+        print("   - m (sin derivacion)")
+    for step in parsed:
+        current = derive_bip32_path_from_node(current, f"m/{step.token}")
+        index_label = (
+            step.child_number - HARDENED_OFFSET if step.hardened else step.child_number
+        )
+        hardened_label = "hardened" if step.hardened else "normal"
+        print(
+            f"   - {step.token}: index={index_label}, tipo={hardened_label}, depth={current.depth}, fp_padre={current.parent_fingerprint.hex()}"
+        )
+    print("   Que sale:")
+    print(f"   - Nodo depth final:   {current.depth}")
+    print(
+        f"   - xprv derivado:      {_display_sensitive(current.xprv, show_secrets=show_secrets)}"
+    )
+    print(f"   - xpub derivado:      {current.xpub}")
+    return {"derived": current}
+
+
+def _print_phase_address(
+    derived, network: str, *, show_secrets: bool
+) -> dict[str, object]:
+    p2wpkh = derive_p2wpkh_address_from_node(derived, network)
+    print("\nFase E) Direccion")
+    print("   Que entra:")
+    print(
+        f"   - Pubkey comprimida:  {_display_sensitive(p2wpkh.compressed_pubkey.hex(), show_secrets=show_secrets)}"
+    )
+    print(f"   - Red:                {network}")
+    print("   Que operacion se hace:")
+    print("   - HASH160(pubkey) + witness program + bech32")
+    print("   Que sale:")
+    print(
+        f"   - HASH160:            {_display_sensitive(p2wpkh.hash160.hex(), show_secrets=show_secrets)}"
+    )
+    print(
+        f"   - Witness:            OP_{p2wpkh.witness_version} {p2wpkh.witness_program.hex()}"
+    )
+    print(f"   - Direccion final:    {p2wpkh.address}")
+    return {"final_addr": p2wpkh}
+
+
+def _print_phase_final_summary(
+    *,
+    mnemonic: str,
+    passphrase: str,
+    path: str,
+    network: str,
+    seed_bytes: bytes,
+    master,
+    derived,
+    final_addr,
+    show_secrets: bool,
+) -> None:
+    print("\nFase F) Resumen final")
+    print("   Inputs usados:")
+    print(f"   - Mnemonic:           {mnemonic}")
+    print(
+        f"   - Passphrase:         {_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets)}"
+    )
+    print(f"   - Ruta:               {path}")
+    print(f"   - Red:                {network}")
+    print("   Outputs clave:")
+    print(
+        f"   - Seed:               {_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)}"
+    )
+    print(f"   - xpub master:        {master.xpub}")
+    print(f"   - xpub derivado:      {derived.xpub}")
+    print(f"   - Direccion final:    {final_addr.address}")
+    print("   ADVERTENCIA: EDUCATIVO, NO CUSTODIA REAL")
+
+
+def _run_interactive_guided_pipeline(state: dict[str, object]) -> int:
+    phase_index = 0
+    while phase_index < 5:
+        if phase_index == 0:
+            seed_artifacts = _print_phase_seed_bip39(
+                mnemonic=str(state["mnemonic"]),
+                passphrase=str(state["passphrase"]),
+                show_secrets=bool(state["show_secrets"]),
+            )
+            state.update(seed_artifacts)
+        elif phase_index == 1:
+            master_artifacts = _print_phase_master_bip32(
+                state["seed_bytes"], show_secrets=bool(state["show_secrets"])
+            )
+            state.update(master_artifacts)
+        elif phase_index == 2:
+            path_artifacts = _print_phase_hd_path(
+                state["master"],
+                str(state["path"]),
+                show_secrets=bool(state["show_secrets"]),
+            )
+            state.update(path_artifacts)
+        elif phase_index == 3:
+            address_artifacts = _print_phase_address(
+                state["derived"],
+                str(state["network"]),
+                show_secrets=bool(state["show_secrets"]),
+            )
+            state.update(address_artifacts)
+        else:
+            _print_phase_final_summary(
+                mnemonic=str(state["mnemonic"]),
+                passphrase=str(state["passphrase"]),
+                path=str(state["path"]),
+                network=str(state["network"]),
+                seed_bytes=state["seed_bytes"],
+                master=state["master"],
+                derived=state["derived"],
+                final_addr=state["final_addr"],
+                show_secrets=bool(state["show_secrets"]),
+            )
+
+        action = _prompt_continue_with_options()
+        if action == "cancel":
+            print("Flujo cancelado por usuario. Salida limpia.")
+            return 0
+        if action == "retry":
+            if phase_index == 0:
+                state["passphrase"] = _prompt_passphrase()
+            elif phase_index == 2:
+                state["path"] = _prompt_hd_path(str(state["network"]))
+            elif phase_index == 3:
+                state["network"] = _prompt_network()
+            elif phase_index == 4:
+                print(
+                    "Reintento de resumen: se recalcula con los mismos inputs actuales."
+                )
+            continue
+        phase_index += 1
+
+    return 0
+
+
 def _print_manual_mnemonic_limit_note() -> None:
     print("\nSubpaso BIP39 (entrada manual de mnemotecnica)")
     print(
@@ -397,7 +590,7 @@ def _print_detailed_breakdown(breakdown) -> None:
 
 def _run_interactive(wordlist: list[str]) -> int:
     _print_header()
-    print("Bienvenido al wizard guiado 11.2 de Seed Steps.")
+    print("Bienvenido al wizard guiado 11.3 de Seed Steps.")
     print("Cada etapa pide datos, valida entrada y confirma continuidad (S/N).")
 
     state: dict[str, object] = {
@@ -485,22 +678,12 @@ def _run_interactive(wordlist: list[str]) -> int:
             stage_index += 1
 
     try:
-        return _print_full_journey(
-            entropy=state["entropy"],
-            mnemonic=str(state["mnemonic"]),
-            passphrase=str(state["passphrase"]),
-            path=str(state["path"]),
-            network=str(state["network"]),
-            wordlist=wordlist,
-            compare_passphrase=None,
-            compare_path=None,
-            show_secrets=bool(state["show_secrets"]),
-        )
+        return _run_interactive_guided_pipeline(state)
     except ValueError as exc:
         print(
             _error_message(
                 "DOMINIO BIP32",
-                f"no se pudo derivar flujo guiado ({exc})",
+                f"no se pudo derivar flujo guiado fase por fase ({exc})",
                 "verifica mnemotecnica, passphrase, ruta y red",
             ),
             file=sys.stderr,
