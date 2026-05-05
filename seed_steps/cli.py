@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import hashlib
 import os
 import sys
@@ -23,7 +24,11 @@ from seed_steps.bip32 import (
 from seed_steps.bip39 import build_bip39_breakdown, load_wordlist
 from seed_steps.entropy import generate_entropy, parse_entropy_hex
 from seed_steps.format import group_binary
-from seed_steps.seed import build_bip39_seed_salt, derive_bip39_seed
+from seed_steps.seed import (
+    build_bip39_seed_salt,
+    derive_bip39_seed,
+    normalize_bip39_text,
+)
 from seed_steps import terminal_style as ts
 from seed_steps.trace import MathTrace
 
@@ -83,6 +88,43 @@ def _format_bits_multiline(bits: str, *, bytes_per_line: int = 8) -> str:
     return "\n".join(lines)
 
 
+def format_hex_bytes(
+    data: bytes, *, bytes_per_group: int = 4, groups_per_line: int = 4
+) -> str:
+    return format_long_hex(
+        data.hex(),
+        hex_per_group=bytes_per_group * 2,
+        groups_per_line=groups_per_line,
+    )
+
+
+def format_bits_by_byte(bits: str, *, bytes_per_line: int = 8) -> str:
+    return _format_bits_multiline(bits, bytes_per_line=bytes_per_line)
+
+
+def format_long_hex(
+    value: str, *, hex_per_group: int = 8, groups_per_line: int = 4
+) -> str:
+    chunks = [
+        value[index : index + hex_per_group]
+        for index in range(0, len(value), hex_per_group)
+    ]
+    lines = [
+        " ".join(chunks[index : index + groups_per_line])
+        for index in range(0, len(chunks), groups_per_line)
+    ]
+    return "\n".join(lines)
+
+
+def format_key_material(label: str, value: str, *, color: str | None = None) -> str:
+    rendered = value if color is None else _colorize(value, color)
+    return f"{label} = {rendered}"
+
+
+def format_derivation_path(path: str) -> str:
+    return " -> ".join(token for token in path.split("/") if token)
+
+
 def _color_segmented_bits(bits: str, *, bit_offset: int, entropy_bits_len: int) -> str:
     rendered: list[str] = []
     for idx, bit in enumerate(bits):
@@ -118,6 +160,53 @@ def _format_segmented_bits_multiline(
 def _print_substep_section(title: str) -> None:
     print()
     print(ts.bright_white(title))
+
+
+def _print_substep_header(phase: int, index: int, total: int, name: str) -> None:
+    print(f"\n{ts.dim('━' * 88)}")
+    print(ts.bright_white(f"Subpaso {index}/{total} — {name}"))
+
+
+def _print_substep_sections(
+    *,
+    objective: list[str],
+    what_is: list[str],
+    why: list[str],
+    inputs: list[str],
+    math: list[str],
+    substitution: list[str],
+    development: list[str],
+    result: list[str],
+    next_step: list[str],
+) -> None:
+    sections = [
+        ("Objetivo", objective),
+        ("Que es", what_is),
+        ("Por que importa", why),
+        ("Datos de entrada", inputs),
+        ("Matematica", math),
+        ("Sustitucion", substitution),
+        ("Desarrollo", development),
+        ("Resultado", result),
+        ("Siguiente paso", next_step),
+    ]
+    for title, items in sections:
+        _print_substep_section(title)
+        for item in items:
+            print(f"- {item}")
+
+
+def _pbkdf2_u_sequence(
+    password: bytes, salt: bytes, iterations: int = 2048
+) -> list[bytes]:
+    u_values: list[bytes] = []
+    block_index = (1).to_bytes(4, "big")
+    u = hmac.new(password, salt + block_index, hashlib.sha512).digest()
+    u_values.append(u)
+    for _ in range(1, iterations):
+        u = hmac.new(password, u, hashlib.sha512).digest()
+        u_values.append(u)
+    return u_values
 
 
 def _colorized_11_bit_block(block: str, start_bit: int, entropy_bits_len: int) -> str:
@@ -934,89 +1023,204 @@ def _print_phase_seed_bip39(
     show_secrets: bool,
     interactive_micro_steps: bool = False,
 ) -> dict[str, object]:
-    _prompt_micro_operation(
-        number=1,
-        input_data="mnemonic cruda del usuario",
-        operation="normalizar mnemotecnica (NFKD)",
-        output_data="mnemonic normalizada",
-        enable=interactive_micro_steps,
-    )
-    mnemonic_value = _colorize(mnemonic, COLOR_WORD)
-    print(f"\n   [micro] Mnemonic normalizada: {mnemonic_value}")
-
+    print("\nFase B) Seed BIP39")
+    normalized_mnemonic = normalize_bip39_text(mnemonic)
+    normalized_passphrase = normalize_bip39_text(passphrase)
+    mnemonic_bytes = normalized_mnemonic.encode("utf-8")
+    salt = build_bip39_seed_salt(passphrase)
+    salt_bytes = salt.encode("utf-8")
+    u_values = _pbkdf2_u_sequence(mnemonic_bytes, salt_bytes, 2048)
+    t1 = bytearray(u_values[0])
+    for u_value in u_values[1:]:
+        for i in range(len(t1)):
+            t1[i] ^= u_value[i]
+    seed_bytes = derive_bip39_seed(mnemonic, passphrase)
     passphrase_display = _display_sensitive(
         passphrase or "(vacia)", show_secrets=show_secrets
     )
-    _prompt_micro_operation(
-        number=2,
-        input_data="passphrase del usuario (o vacia)",
-        operation="normalizar passphrase y concatenar con prefijo 'mnemonic'",
-        output_data="salt efectivo para PBKDF2",
-        enable=interactive_micro_steps,
-    )
-    salt = build_bip39_seed_salt(passphrase)
-    print(
-        "   [micro] Salt = "
-        f"'mnemonic' + {_colorize(passphrase_display, COLOR_PASSPHRASE)} => {_colorize(salt, COLOR_PASSPHRASE)}"
-    )
+    seed_display = _display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)
 
-    _prompt_micro_operation(
-        number=3,
-        input_data="mnemonic normalizada + salt",
-        operation="PBKDF2-HMAC-SHA512 (2048 iteraciones)",
-        output_data="seed BIP39 de 64 bytes",
-        enable=interactive_micro_steps,
-    )
-    seed_bytes = derive_bip39_seed(mnemonic, passphrase)
-    print("\nFase B) Seed BIP39")
-    print("   Objetivo del paso: convertir la mnemotecnica en una seed de 64 bytes.")
-    print(
-        "   Lectura docente: tomamos tu frase y la pasamos por una maquina de estiramiento criptografico."
-    )
-    print(
-        "   Que debes observar: cambiar passphrase produce una seed completamente distinta."
-    )
-    print("   Que entra:")
-    print(f"   - Mnemonic:           {mnemonic_value}")
-    print()
-    print(f"   - Passphrase:         {_colorize(passphrase_display, COLOR_PASSPHRASE)}")
-    print()
-    print("   Que operacion se hace:")
-    print(
-        "   - Formula mental: "
-        f"{_colorize('seed', COLOR_SEED)} = PBKDF2("
-        f"{_colorize('mnemonic', COLOR_WORD)}, salt='mnemonic'+{_colorize('passphrase', COLOR_PASSPHRASE)}, 2048)"
-    )
-    print("   - Motor real: PBKDF2-HMAC-SHA512, iteraciones=2048")
-    print()
-    print(f"   - Salt:               {_colorize(salt, COLOR_PASSPHRASE)}")
-    print()
-    print("   Que sale:")
-    print(
-        f"   - Seed (hex, 64 bytes): {_colorize(_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED)}"
-    )
+    substeps = [
+        "Mnemonic de entrada",
+        "Normalizacion NFKD",
+        "Passphrase",
+        "Salt BIP39",
+        "PBKDF2-HMAC-SHA512",
+        "Seed final",
+    ]
+    for index, name in enumerate(substeps, start=1):
+        if interactive_micro_steps:
+            _prompt_micro_operation(
+                number=index,
+                input_data="entrada del subpaso",
+                operation=name,
+                output_data="salida para siguiente subpaso",
+                enable=True,
+            )
+
+        _print_substep_header(2, index, len(substeps), name)
+        if index == 1:
+            _print_substep_sections(
+                objective=[
+                    "Fijar la frase mnemotecnica que alimenta toda la derivacion."
+                ],
+                what_is=["Cadena BIP39 de palabras separadas por espacios."],
+                why=["Un cambio minimo altera seed, master key y direcciones finales."],
+                inputs=[format_key_material("mnemonic", mnemonic, color=COLOR_WORD)],
+                math=[ts.formula("password = mnemonic_norm_utf8")],
+                substitution=[ts.formula("password = NFKD(mnemonic)")],
+                development=[
+                    "mnemotecnica (agrupada):",
+                    "  "
+                    + "\n  ".join(
+                        [
+                            " ".join(mnemonic.split()[i : i + 4])
+                            for i in range(0, len(mnemonic.split()), 4)
+                        ]
+                    ),
+                ],
+                result=["salida -> mnemonic original para normalizar"],
+                next_step=[
+                    "Aplicar NFKD sobre mnemonic para obtener password canonico."
+                ],
+            )
+        elif index == 2:
+            _print_substep_sections(
+                objective=[
+                    "Normalizar texto para cumplir BIP39 de forma determinista."
+                ],
+                what_is=["NFKD transforma equivalentes Unicode en forma canonica."],
+                why=["Evita seeds distintas por diferencias visuales del mismo texto."],
+                inputs=[format_key_material("mnemonic", mnemonic, color=COLOR_WORD)],
+                math=[ts.formula("password = NFKD(mnemonic).encode('utf-8')")],
+                substitution=[
+                    ts.formula(f"len(password) = {len(mnemonic_bytes)} bytes")
+                ],
+                development=[
+                    "password bytes (hex):",
+                    "  " + format_hex_bytes(mnemonic_bytes),
+                ],
+                result=["salida -> password para PBKDF2"],
+                next_step=["Procesar passphrase bajo misma regla NFKD."],
+            )
+        elif index == 3:
+            _print_substep_sections(
+                objective=["Preparar segundo factor opcional de BIP39."],
+                what_is=["Passphrase es texto libre que endurece la derivacion."],
+                why=[
+                    "Mismo mnemonic + passphrase distinta = seed totalmente distinta."
+                ],
+                inputs=[
+                    format_key_material(
+                        "passphrase", passphrase_display, color=COLOR_PASSPHRASE
+                    )
+                ],
+                math=[ts.formula("passphrase_norm = NFKD(passphrase)")],
+                substitution=[
+                    ts.formula(
+                        f"len(passphrase_norm_utf8) = {len(normalized_passphrase.encode('utf-8'))} bytes"
+                    )
+                ],
+                development=["passphrase normalizada lista para construir salt."],
+                result=["salida -> passphrase normalizada"],
+                next_step=[
+                    "Concatenar prefijo fijo 'mnemonic' + passphrase normalizada."
+                ],
+            )
+        elif index == 4:
+            _print_substep_sections(
+                objective=["Construir salt efectivo usado por PBKDF2."],
+                what_is=["Salt BIP39: literal 'mnemonic' + passphrase normalizada."],
+                why=["Introduce dominio BIP39 y evita colisiones triviales entre KDF."],
+                inputs=[
+                    format_key_material(
+                        "passphrase_norm", passphrase_display, color=COLOR_PASSPHRASE
+                    )
+                ],
+                math=[ts.formula("salt = 'mnemonic' + passphrase_norm")],
+                substitution=[ts.formula(f"salt = 'mnemonic' + '{passphrase}'")],
+                development=[
+                    "salt (texto): " + _colorize(salt, COLOR_PASSPHRASE),
+                    "salt bytes (hex):",
+                    "  " + format_hex_bytes(salt_bytes),
+                ],
+                result=["salida -> salt para PBKDF2"],
+                next_step=["Ejecutar PBKDF2-HMAC-SHA512 con 2048 iteraciones."],
+            )
+        elif index == 5:
+            dev_lines = [
+                f"iteracion 0001 -> U_1  = {_colorize(format_long_hex(u_values[0].hex(), groups_per_line=2), COLOR_SEED)}",
+                f"iteracion 0002 -> U_2  = {_colorize(format_long_hex(u_values[1].hex(), groups_per_line=2), COLOR_SEED)}",
+                f"iteracion 0003 -> U_3  = {_colorize(format_long_hex(u_values[2].hex(), groups_per_line=2), COLOR_SEED)}",
+                "...",
+                "2042 iteraciones intermedias omitidas",
+                "...",
+                f"iteracion 2046 -> U_2046 = {_colorize(format_long_hex(u_values[2045].hex(), groups_per_line=2), COLOR_SEED)}",
+                f"iteracion 2047 -> U_2047 = {_colorize(format_long_hex(u_values[2046].hex(), groups_per_line=2), COLOR_SEED)}",
+                f"iteracion 2048 -> U_2048 = {_colorize(format_long_hex(u_values[2047].hex(), groups_per_line=2), COLOR_SEED)}",
+                ts.formula("T_1 = U_1 XOR U_2 XOR ... XOR U_2048"),
+                ts.formula("len(seed) = 64 bytes"),
+            ]
+            _print_substep_sections(
+                objective=["Mostrar mecanica iterativa de PBKDF2 sin salida ilegible."],
+                what_is=["PBKDF2 encadena HMAC-SHA512 y acumula XOR por bloque."],
+                why=[
+                    "Visualiza costo computacional (2048 iteraciones) del estandar BIP39."
+                ],
+                inputs=[
+                    format_key_material(
+                        "password/mnemonic", mnemonic, color=COLOR_WORD
+                    ),
+                    format_key_material(
+                        "passphrase", passphrase_display, color=COLOR_PASSPHRASE
+                    ),
+                    format_key_material("salt", salt, color=COLOR_PASSPHRASE),
+                ],
+                math=[
+                    ts.formula("U_1 = PRF(password, salt || INT_32_BE(1))"),
+                    ts.formula("U_i = PRF(password, U_{i-1}) para i=2..2048"),
+                    ts.formula("T_1 = U_1 XOR U_2 XOR ... XOR U_2048"),
+                ],
+                substitution=[
+                    ts.formula("PRF = HMAC-SHA512"),
+                    ts.formula("iterations = 2048"),
+                    ts.formula("dklen = 64"),
+                ],
+                development=dev_lines,
+                result=[
+                    f"T_1 (64 bytes) = {_colorize(format_long_hex(bytes(t1).hex(), groups_per_line=2), COLOR_SEED)}"
+                ],
+                next_step=[
+                    "Como dklen=64 y bloque SHA512=64, basta UN bloque: DK = T_1."
+                ],
+            )
+        else:
+            _print_substep_sections(
+                objective=["Entregar seed final para alimentar fase BIP32 raiz."],
+                what_is=["Resultado PBKDF2 de 64 bytes para arbol HD."],
+                why=["Es la entrada exacta para HMAC-SHA512('Bitcoin seed', seed)."],
+                inputs=["T_1 derivado del subpaso PBKDF2"],
+                math=[ts.formula("DK = T_1")],
+                substitution=[ts.formula("seed = PBKDF2(..., dklen=64) = T_1")],
+                development=[
+                    "seed final (hex agrupado):",
+                    "  " + _colorize(format_long_hex(seed_display), COLOR_SEED),
+                ],
+                result=[
+                    f"seed (hex, 64 bytes) = {_colorize(seed_display, COLOR_SEED)}"
+                ],
+                next_step=[
+                    "Salida hacia Fase 3: usar seed como mensaje de HMAC BIP32."
+                ],
+            )
     return {"seed_bytes": seed_bytes, "salt": salt}
 
 
 def _print_phase_master_bip32(
     seed_bytes: bytes, *, show_secrets: bool, interactive_micro_steps: bool = False
 ) -> dict[str, object]:
-    _prompt_micro_operation(
-        number=1,
-        input_data="seed BIP39 (64 bytes)",
-        operation="preparar seed como mensaje para HMAC",
-        output_data="mensaje listo para HMAC-SHA512",
-        enable=interactive_micro_steps,
-    )
+    print("\nFase C) Master BIP32")
     seed_hex = _display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)
-    print(f"\n   [micro] Seed entrada: {_colorize(seed_hex, COLOR_SEED)}")
-    _prompt_micro_operation(
-        number=2,
-        input_data="clave='Bitcoin seed' + mensaje=seed",
-        operation="HMAC-SHA512(clave, mensaje)",
-        output_data="digest I (IL || IR)",
-        enable=interactive_micro_steps,
-    )
     master = derive_bip32_master_node(seed_bytes)
     hmac_hex = _display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)
     il_hex = _display_sensitive(
@@ -1025,13 +1229,6 @@ def _print_phase_master_bip32(
     ir_hex = _display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)
     i_colored = _colorize(il_hex, COLOR_IL) + _colorize(ir_hex, COLOR_IR)
 
-    _prompt_micro_operation(
-        number=3,
-        input_data="IL (master key) + IR (chain code)",
-        operation="serializar payload xprv (BIP32 mainnet)",
-        output_data="xprv payload previo a Base58Check",
-        enable=interactive_micro_steps,
-    )
     xprv_key_data = "00" + master.master_private_key.hex()
     xprv_payload = (
         MAINNET_XPRV_VERSION.hex()
@@ -1040,13 +1237,6 @@ def _print_phase_master_bip32(
         + "00000000"
         + master.chain_code.hex()
         + xprv_key_data
-    )
-    _prompt_micro_operation(
-        number=4,
-        input_data="pubkey comprimida + chain code",
-        operation="serializar payload xpub (BIP32 mainnet)",
-        output_data="xpub payload previo a Base58Check",
-        enable=interactive_micro_steps,
     )
     pubkey_compressed = compressed_pubkey_from_private_key(
         master.master_private_key
@@ -1060,53 +1250,112 @@ def _print_phase_master_bip32(
         + pubkey_compressed
     )
 
-    print("\nFase C) Master BIP32")
-    print(
-        "   Objetivo del paso: obtener la clave maestra y el chain code del arbol HD."
-    )
-    print(
-        "   Lectura docente: desde la seed nacen dos piezas: secreto maestro y cadena de derivacion."
-    )
-    print(
-        "   Que debes observar: IL e IR salen del mismo HMAC, pero cumplen funciones distintas."
-    )
-    print("   Que entra:")
-    print(f"   - Seed:               {_colorize(seed_hex, COLOR_SEED)}")
-    print()
-    print("   Que operacion se hace:")
-    print(f"   - Clave HMAC:         {_colorize('Bitcoin seed', COLOR_IR)}")
-    print(
-        "   - Origen de esa clave: constante fija del estandar BIP32 para derivar la master key."
-    )
-    print()
-    print(f"   - Entrada HMAC:       {_colorize(seed_hex, COLOR_SEED)}")
-    print()
-    print("   - Operacion:          HMAC-SHA512(clave, entrada)")
-    print()
-    print("   Que sale:")
-    print(f"   - I:                  {i_colored}  | IL(izq, azul) + IR(der, morado)")
-    print()
-    print(
-        f"   - IL (master key):    {_colorize(il_hex, COLOR_IL)}  | Mitad izquierda: clave privada raiz"
-    )
-    print()
-    print(
-        f"   - IR (chain code):    {_colorize(ir_hex, COLOR_IR)}  | Mitad derecha: cadena que guia derivaciones"
-    )
-    print()
-    print(f"   - Payload xprv:       {_colorize(xprv_payload, COLOR_XPRV)}")
-    print(f"   - Payload xpub:       {_colorize(xpub_payload, COLOR_XPUB)}")
-    print()
-    print(
-        f"   - xprv:               {_colorize(_display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV)}  | Empaquetado del nodo privado maestro"
-    )
-    print()
-    print(
-        f"   - xpub:               {_colorize(master.xpub, COLOR_XPUB)}  | Version publica para derivar/consultar sin firmar"
-    )
-    print(
-        "   Explicacion simple: xprv firma y deriva; xpub solo deriva/consulta direcciones."
-    )
+    substeps = [
+        "Seed de entrada",
+        "HMAC maestro",
+        "Separar IL/IR",
+        "Payload xprv",
+        "Payload xpub",
+        "Nodo maestro final",
+    ]
+    for index, name in enumerate(substeps, start=1):
+        if interactive_micro_steps:
+            _prompt_micro_operation(
+                number=index,
+                input_data="entrada",
+                operation=name,
+                output_data="salida",
+                enable=True,
+            )
+        _print_substep_header(3, index, len(substeps), name)
+        if index == 1:
+            _print_substep_sections(
+                objective=["Tomar la seed BIP39 como insumo raiz."],
+                what_is=["Mensaje de 64 bytes para HMAC inicial BIP32."],
+                why=["Sin seed no existe nodo maestro HD."],
+                inputs=[format_key_material("seed", seed_hex, color=COLOR_SEED)],
+                math=[ts.formula("mensaje = seed")],
+                substitution=[ts.formula("len(seed) = 64")],
+                development=[
+                    "seed agrupada:",
+                    "  " + _colorize(format_long_hex(seed_hex), COLOR_SEED),
+                ],
+                result=["salida -> mensaje para HMAC"],
+                next_step=["Aplicar HMAC-SHA512 con clave fija 'Bitcoin seed'."],
+            )
+        elif index == 2:
+            _print_substep_sections(
+                objective=["Calcular digest maestro I."],
+                what_is=["HMAC-SHA512(clave, mensaje)."],
+                why=["Genera material para clave privada y chain code."],
+                inputs=[
+                    format_key_material("key", "Bitcoin seed", color=COLOR_IR),
+                    format_key_material("msg", seed_hex, color=COLOR_SEED),
+                ],
+                math=[ts.formula("I = HMAC-SHA512('Bitcoin seed', seed)")],
+                substitution=[ts.formula("I = IL || IR")],
+                development=["I (hex, 64 bytes):", "  " + i_colored],
+                result=["salida -> I para particionar"],
+                next_step=["Partir I en IL (izq) y IR (der)."],
+            )
+        elif index == 3:
+            _print_substep_sections(
+                objective=["Separar secreto y cadena de derivacion."],
+                what_is=["IL=master key, IR=chain code."],
+                why=["Cumplen roles distintos en derivacion HD."],
+                inputs=["I = IL || IR"],
+                math=[ts.formula("IL = I[0:32], IR = I[32:64]")],
+                substitution=[ts.formula("32 bytes + 32 bytes")],
+                development=[
+                    f"IL = {_colorize(il_hex, COLOR_IL)}",
+                    f"IR = {_colorize(ir_hex, COLOR_IR)}",
+                ],
+                result=["salida -> IL/IR listos para serializar"],
+                next_step=["Construir payload xprv con IL e IR."],
+            )
+        elif index == 4:
+            _print_substep_sections(
+                objective=["Preparar serializacion privada BIP32."],
+                what_is=["Payload previo a Base58Check para xprv."],
+                why=["Estandariza version/depth/fingerprint/chain/key."],
+                inputs=["version xprv + campos BIP32 + IL + IR"],
+                math=[
+                    ts.formula("xprv_payload = version||depth||fp||child||IR||00||IL")
+                ],
+                substitution=[ts.formula("version=0488ade4")],
+                development=[_colorize(format_long_hex(xprv_payload), COLOR_XPRV)],
+                result=["salida -> payload xprv"],
+                next_step=["Construir payload equivalente para xpub."],
+            )
+        elif index == 5:
+            _print_substep_sections(
+                objective=["Preparar serializacion publica BIP32."],
+                what_is=["Payload previo a Base58Check para xpub."],
+                why=["Permite derivacion/consulta sin exponer secreto."],
+                inputs=["version xpub + campos BIP32 + IR + pubkey"],
+                math=[
+                    ts.formula("xpub_payload = version||depth||fp||child||IR||pubkey")
+                ],
+                substitution=[ts.formula("version=0488b21e")],
+                development=[_colorize(format_long_hex(xpub_payload), COLOR_XPUB)],
+                result=["salida -> payload xpub"],
+                next_step=["Codificar ambos payloads en Base58Check."],
+            )
+        else:
+            _print_substep_sections(
+                objective=["Entregar nodo maestro BIP32 completo."],
+                what_is=["xprv/xpub iniciales del arbol HD."],
+                why=["Punto de partida para rutas BIP84."],
+                inputs=["payloads xprv/xpub"],
+                math=[ts.formula("node_master = {xprv, xpub, IL, IR}")],
+                substitution=[ts.formula("depth=0")],
+                development=[
+                    f"xprv = {_colorize(_display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV)}",
+                    f"xpub = {_colorize(master.xpub, COLOR_XPUB)}",
+                ],
+                result=["salida -> Fase 4 usa este nodo como origen"],
+                next_step=["Aplicar ruta HD objetivo en la siguiente fase."],
+            )
     return {"master": master}
 
 
@@ -1116,16 +1365,6 @@ def _print_phase_hd_path(
     parsed = parse_bip32_path(path)
     current = derive_bip32_node_from_master(master)
     print("\nFase D) Ruta HD")
-    print("   Objetivo del paso: llegar desde la raiz a una clave hija especifica.")
-    print(
-        "   Mapa mental BIP44/BIP84: m / purpose' / coin_type' / account' / change / index"
-    )
-    print(
-        "   Que debes observar: un solo cambio en la ruta termina en otra clave y otra direccion."
-    )
-    print("   Que entra:")
-    print(f"   - Ruta:               {path}")
-    print()
     route_tokens = ["m"] + [step.token for step in parsed]
     level_labels = [
         "raiz",
@@ -1135,17 +1374,17 @@ def _print_phase_hd_path(
         "change",
         "index",
     ]
-    print("   Tabla de niveles para ESTA ruta:")
-    print("   nivel | valor   | significado")
-    print("   ------+---------+------------------------------")
+    table_lines = [
+        "nivel | valor   | significado",
+        "------+---------+------------------------------",
+    ]
     for i, label in enumerate(level_labels):
         value = route_tokens[i] if i < len(route_tokens) else "(no aplica)"
-        print(f"   {i:>5} | {value:<7} | {label}")
-    print("   Que operacion se hace:")
-    print("   - Derivacion nivel por nivel (de m hacia la hoja)")
-    print()
+        table_lines.append(f"{i:>5} | {value:<7} | {label}")
+
+    derivation_log: list[str] = []
     if not parsed:
-        print("   - m (sin derivacion) | Se mantiene el nodo maestro en depth=0")
+        derivation_log.append("m (sin derivacion): nodo maestro depth=0")
     for micro_index, step in enumerate(parsed, start=1):
         _prompt_micro_operation(
             number=micro_index,
@@ -1159,79 +1398,222 @@ def _print_phase_hd_path(
             step.child_number - HARDENED_OFFSET if step.hardened else step.child_number
         )
         hardened_label = "hardened" if step.hardened else "normal"
-        print(
-            f"   - {step.token}: index={index_label}, tipo={hardened_label}, nivel={current.depth}, fp_padre={current.parent_fingerprint.hex()}  | fp_padre=huella corta (4 bytes) del nodo padre; avanzamos un nivel del mapa HD"
+        derivation_log.append(
+            f"{step.token}: index={index_label}, tipo={hardened_label}, depth={current.depth}, fp_padre={current.parent_fingerprint.hex()}"
         )
-    print("   Que sale:")
-    print(f"   - Nodo depth final:   {current.depth}")
-    print(
-        f"   - xprv derivado:      {_colorize(_display_sensitive(current.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
-    )
-    print()
-    print(f"   - xpub derivado:      {_colorize(current.xpub, COLOR_XPUB)}")
+
+    substeps = [
+        "Ruta objetivo",
+        "Parseo de ruta",
+        "Niveles BIP84",
+        "Derivacion CKDpriv",
+        "Nodo hoja",
+        "Material derivado",
+    ]
+    for index, name in enumerate(substeps, start=1):
+        if interactive_micro_steps:
+            _prompt_micro_operation(
+                number=index,
+                input_data="entrada",
+                operation=name,
+                output_data="salida",
+                enable=True,
+            )
+        _print_substep_header(4, index, len(substeps), name)
+        if index == 1:
+            _print_substep_sections(
+                objective=["Declarar camino exacto hasta la hoja."],
+                what_is=["Ruta HD con niveles hardened/normal."],
+                why=["Modificar un nivel produce otra clave hija."],
+                inputs=[format_key_material("path", path)],
+                math=[
+                    ts.formula("m / purpose' / coin_type' / account' / change / index")
+                ],
+                substitution=[ts.formula(format_derivation_path(path))],
+                development=["ruta normalizada lista para parseo"],
+                result=["salida -> tokens de ruta"],
+                next_step=["Parsear y validar sintaxis BIP32."],
+            )
+        elif index == 2:
+            _print_substep_sections(
+                objective=["Validar estructura de la ruta."],
+                what_is=["Parser BIP32 transforma texto en pasos numericos."],
+                why=["Evita derivaciones ambiguas o fuera de norma."],
+                inputs=[format_key_material("path", path)],
+                math=[ts.formula("steps = parse_bip32_path(path)")],
+                substitution=[ts.formula(f"steps = {len(parsed)}")],
+                development=["tokens: " + ", ".join(step.token for step in parsed)],
+                result=["salida -> lista de pasos valida"],
+                next_step=["Mapear cada paso a su nivel semantico."],
+            )
+        elif index == 3:
+            _print_substep_sections(
+                objective=["Relacionar ruta con semantica BIP84."],
+                what_is=["Tabla nivel/valor/significado."],
+                why=["Ayuda a razonar purpose, moneda, cuenta y address index."],
+                inputs=["tokens parseados"],
+                math=[ts.formula("nivel 0..5")],
+                substitution=[ts.formula("m/84'/0'/0'/0/0")],
+                development=table_lines,
+                result=["salida -> mapa de niveles"],
+                next_step=["Ejecutar CKDpriv nivel por nivel."],
+            )
+        elif index == 4:
+            _print_substep_sections(
+                objective=["Derivar nodo hijo por cada nivel."],
+                what_is=["CKDpriv hardened o normal segun token."],
+                why=["Construye camino determinista desde master."],
+                inputs=["master node + pasos"],
+                math=[ts.formula("child = CKDpriv(parent, index)")],
+                substitution=[ts.formula("hardened => index + 2^31")],
+                development=derivation_log,
+                result=["salida -> nodo hoja depth final"],
+                next_step=["Consolidar metadata del nodo hoja."],
+            )
+        elif index == 5:
+            _print_substep_sections(
+                objective=["Verificar que llegamos al nodo esperado."],
+                what_is=["Depth/child/fingerprint del nodo final."],
+                why=["Confirma que la ruta aplicada fue la correcta."],
+                inputs=["nodo tras ultima derivacion"],
+                math=[ts.formula("depth = len(steps)")],
+                substitution=[ts.formula(f"depth = {current.depth}")],
+                development=[
+                    f"child_number = {current.child_number}",
+                    f"parent_fp = {current.parent_fingerprint.hex()}",
+                ],
+                result=["salida -> nodo listo para serializar"],
+                next_step=["Mostrar xprv/xpub de la hoja."],
+            )
+        else:
+            _print_substep_sections(
+                objective=["Entregar clave derivada para fase de direccion."],
+                what_is=["xprv/xpub del nodo hoja de la ruta."],
+                why=["La pubkey de este nodo genera la direccion P2WPKH."],
+                inputs=["nodo hoja"],
+                math=[ts.formula("serialized node -> xprv/xpub")],
+                substitution=[ts.formula("network agnostica en esta fase")],
+                development=[
+                    f"xprv = {_colorize(_display_sensitive(current.xprv, show_secrets=show_secrets), COLOR_XPRV)}",
+                    f"xpub = {_colorize(current.xpub, COLOR_XPUB)}",
+                ],
+                result=["salida -> Fase 5 usa esta clave publica"],
+                next_step=["Construir HASH160 y codificar Bech32."],
+            )
     return {"derived": current}
 
 
 def _print_phase_address(
     derived, network: str, *, show_secrets: bool, interactive_micro_steps: bool = False
 ) -> dict[str, object]:
-    _prompt_micro_operation(
-        number=1,
-        input_data="nodo derivado (clave privada hija)",
-        operation="extraer pubkey comprimida",
-        output_data="pubkey comprimida lista para hash",
-        enable=interactive_micro_steps,
-    )
     p2wpkh = derive_p2wpkh_address_from_node(derived, network)
     print("\nFase E) Direccion")
-    print(
-        "   Objetivo del paso: transformar la clave publica derivada en direccion usable."
-    )
-    print(
-        "   Contexto: la pubkey comprimida sale del nodo derivado (clave privada hija)."
-    )
-    print("   Que debes observar: red y ruta afectan directamente el resultado final.")
-    print("   Que entra:")
-    print(
-        f"   - Pubkey comprimida:  {_colorize(_display_sensitive(p2wpkh.compressed_pubkey.hex(), show_secrets=show_secrets), COLOR_XPUB)}"
-    )
-    print()
-    print(f"   - Red:                {network}")
-    _prompt_micro_operation(
-        number=2,
-        input_data="pubkey comprimida",
-        operation="HASH160(pubkey)",
-        output_data="hash160 (20 bytes)",
-        enable=interactive_micro_steps,
-    )
     hash160_hex = _display_sensitive(p2wpkh.hash160.hex(), show_secrets=show_secrets)
-    _prompt_micro_operation(
-        number=3,
-        input_data="hash160 + witness_version=0",
-        operation="formar witness program SegWit v0",
-        output_data="script witness OP_0 <20-byte-hash>",
-        enable=interactive_micro_steps,
-    )
     witness_line = f"OP_{p2wpkh.witness_version} {p2wpkh.witness_program.hex()}"
-    _prompt_micro_operation(
-        number=4,
-        input_data="hrp de red + witness program",
-        operation="codificar Bech32",
-        output_data="direccion P2WPKH final",
-        enable=interactive_micro_steps,
-    )
-    print("   Que operacion se hace:")
-    print(
-        "   - Flujo completo: "
-        f"contexto priv/pub -> {_colorize('pubkey comprimida', COLOR_XPUB)}"
-        f" -> {_colorize('HASH160', COLOR_IR)} -> witness program -> Bech32"
-    )
-    print("   Que sale:")
-    print(f"   - HASH160:            {_colorize(hash160_hex, COLOR_IR)}")
-    print()
-    print(f"   - Witness:            {_colorize(witness_line, COLOR_CHECKSUM)}")
-    print()
-    print(f"   - Direccion final:    {_colorize(p2wpkh.address, COLOR_FINAL_ADDRESS)}")
+    substeps = [
+        "Pubkey comprimida",
+        "HASH160",
+        "Witness program",
+        "HRP de red",
+        "Codificacion Bech32",
+        "Direccion final",
+    ]
+    for index, name in enumerate(substeps, start=1):
+        if interactive_micro_steps:
+            _prompt_micro_operation(
+                number=index,
+                input_data="entrada",
+                operation=name,
+                output_data="salida",
+                enable=True,
+            )
+        _print_substep_header(5, index, len(substeps), name)
+        if index == 1:
+            _print_substep_sections(
+                objective=["Extraer pubkey comprimida del nodo derivado."],
+                what_is=["Clave publica de 33 bytes (SEC comprimido)."],
+                why=["Base para HASH160 y direccion SegWit."],
+                inputs=["nodo derivado BIP84"],
+                math=[ts.formula("pubkey = point(k_child)")],
+                substitution=[ts.formula("len(pubkey)=33")],
+                development=[
+                    _colorize(
+                        format_long_hex(
+                            _display_sensitive(
+                                p2wpkh.compressed_pubkey.hex(),
+                                show_secrets=show_secrets,
+                            )
+                        ),
+                        COLOR_XPUB,
+                    )
+                ],
+                result=["salida -> pubkey comprimida"],
+                next_step=["Aplicar HASH160 sobre la pubkey."],
+            )
+        elif index == 2:
+            _print_substep_sections(
+                objective=["Obtener identificador corto de la pubkey."],
+                what_is=["HASH160 = RIPEMD160(SHA256(pubkey))."],
+                why=["Reduce a 20 bytes para witness program P2WPKH."],
+                inputs=["pubkey comprimida"],
+                math=[ts.formula("hash160 = RIPEMD160(SHA256(pubkey))")],
+                substitution=[ts.formula("len(hash160)=20")],
+                development=[_colorize(format_long_hex(hash160_hex), COLOR_IR)],
+                result=["salida -> hash160"],
+                next_step=["Formar witness program v0."],
+            )
+        elif index == 3:
+            _print_substep_sections(
+                objective=["Construir script witness SegWit v0."],
+                what_is=["OP_0 + hash160 de 20 bytes."],
+                why=["Estructura requerida por P2WPKH."],
+                inputs=["witness_version=0", "hash160"],
+                math=[ts.formula("witness = OP_0 <20-byte-hash>")],
+                substitution=[ts.formula(witness_line)],
+                development=[_colorize(witness_line, COLOR_CHECKSUM)],
+                result=["salida -> witness program"],
+                next_step=["Seleccionar HRP segun red."],
+            )
+        elif index == 4:
+            _print_substep_sections(
+                objective=["Definir prefijo humano legible de red."],
+                what_is=["HRP=bc mainnet, tb testnet."],
+                why=["Evita confundir direcciones entre redes."],
+                inputs=[format_key_material("network", network)],
+                math=[ts.formula("hrp in {'bc','tb'}")],
+                substitution=[ts.formula(f"hrp = {p2wpkh.hrp}")],
+                development=[f"network={network} -> hrp={p2wpkh.hrp}"],
+                result=["salida -> hrp para Bech32"],
+                next_step=["Codificar witness program en Bech32."],
+            )
+        elif index == 5:
+            _print_substep_sections(
+                objective=["Codificar direccion final de transporte."],
+                what_is=["Bech32 sobre HRP + datos witness."],
+                why=["Formato robusto y legible para SegWit."],
+                inputs=["hrp + witness program"],
+                math=[ts.formula("address = bech32_encode(hrp, witness)")],
+                substitution=[
+                    ts.formula(f"hrp={p2wpkh.hrp}, v={p2wpkh.witness_version}")
+                ],
+                development=["checksum Bech32 integrado en la cadena final"],
+                result=["salida -> address string"],
+                next_step=["Presentar direccion final consolidada."],
+            )
+        else:
+            _print_substep_sections(
+                objective=["Entregar direccion utilizable para recibir BTC."],
+                what_is=["P2WPKH Bech32 derivada de la ruta elegida."],
+                why=["Es el destino final del flujo pedagógico."],
+                inputs=["pubkey + network + witness"],
+                math=[ts.formula("final_address = P2WPKH(pubkey, network)")],
+                substitution=[ts.formula(p2wpkh.address)],
+                development=[_colorize(p2wpkh.address, COLOR_FINAL_ADDRESS)],
+                result=[
+                    f"direccion final = {_colorize(p2wpkh.address, COLOR_FINAL_ADDRESS)}"
+                ],
+                next_step=["Salida hacia resumen final del wizard."],
+            )
     return {"final_addr": p2wpkh}
 
 
@@ -1461,8 +1843,6 @@ def _run_interactive(
                     return 0
                 if b39_action == "retry":
                     continue
-                if no_pause:
-                    return 0
             else:
                 _print_manual_mnemonic_limit_note()
                 b39_action = _prompt_continue_with_options()
@@ -1476,34 +1856,40 @@ def _run_interactive(
             continue
 
         elif stage_index == 1:
-            passphrase = _prompt_passphrase()
+            passphrase = "" if no_pause else _prompt_passphrase()
             state["passphrase"] = passphrase
             seed_artifacts = _print_phase_seed_bip39(
                 mnemonic=str(state["mnemonic"]),
                 passphrase=passphrase,
                 show_secrets=True,
-                interactive_micro_steps=True,
+                interactive_micro_steps=not no_pause,
             )
             state.update(seed_artifacts)
             print("\nEtapa 2/5 completada: seed BIP39 derivada")
 
         elif stage_index == 2:
             master_artifacts = _print_phase_master_bip32(
-                state["seed_bytes"], show_secrets=True, interactive_micro_steps=True
+                state["seed_bytes"],
+                show_secrets=True,
+                interactive_micro_steps=not no_pause,
             )
             state.update(master_artifacts)
             print("\nEtapa 3/5 completada: master BIP32 derivada")
 
         elif stage_index == 3:
-            network = _prompt_network()
+            network = "mainnet" if no_pause else _prompt_network()
             state["network"] = network
-            path = _prompt_hd_path(str(state["network"]))
+            path = (
+                _default_path_for_network(network)
+                if no_pause
+                else _prompt_hd_path(str(state["network"]))
+            )
             state["path"] = path
             path_artifacts = _print_phase_hd_path(
                 state["master"],
                 path,
                 show_secrets=True,
-                interactive_micro_steps=True,
+                interactive_micro_steps=not no_pause,
             )
             state.update(path_artifacts)
             print("\nEtapa 4/5 completada: ruta HD derivada")
@@ -1513,7 +1899,7 @@ def _run_interactive(
                 state["derived"],
                 str(state["network"]),
                 show_secrets=True,
-                interactive_micro_steps=True,
+                interactive_micro_steps=not no_pause,
             )
             state.update(address_artifacts)
             _print_phase_final_summary(

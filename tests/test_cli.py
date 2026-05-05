@@ -408,6 +408,16 @@ def test_cli_wizard_no_pause_entropy_zero_shows_known_bip39_math_trace(
     )
     assert "Traza 1)" not in captured.out
     assert "Traza " not in captured.out
+    assert "iterations = 2048" in captured.out
+    assert "iteracion 0001" in captured.out
+    assert "iteracion 0002" in captured.out
+    assert "iteracion 0003" in captured.out
+    assert "2042 iteraciones intermedias omitidas" in captured.out
+    assert "iteracion 2046" in captured.out
+    assert "iteracion 2047" in captured.out
+    assert "iteracion 2048" in captured.out
+    assert "T_1 = U_1 XOR U_2 XOR ... XOR U_2048" in captured.out
+    assert "len(seed) = 64 bytes" in captured.out
 
 
 def test_cli_colors_respect_no_color_and_default_mode(capsys, monkeypatch) -> None:
