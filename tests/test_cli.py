@@ -234,3 +234,105 @@ def test_cli_interactive_manual_entropy_retries_on_invalid_input(
         "Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         in captured.out
     )
+
+
+def test_cli_derives_seed_from_explicit_mnemonic(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--mnemonic",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--passphrase",
+            "TREZOR",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "6. Seed BIP39" in captured.out
+    assert "Salt efectivo:       mnemonicTREZOR" in captured.out
+    assert (
+        "Seed (hex, 64 bytes): c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e5349553"
+        in captured.out
+    )
+
+
+def test_cli_derives_seed_from_generated_mnemonic(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--derive-seed",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert (
+        "Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        in captured.out
+    )
+    assert "6. Seed BIP39" in captured.out
+    assert "Passphrase:          (vacia)" in captured.out
+    assert "Salt efectivo:       mnemonic" in captured.out
+
+
+def test_cli_derives_bip32_from_explicit_mnemonic(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--mnemonic",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--passphrase",
+            "TREZOR",
+            "--derive-bip32",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "7. Master node BIP32" in captured.out
+    assert "I = HMAC-SHA512:" in captured.out
+    assert "xprv (mainnet):      xprv9s21ZrQH143K3" in captured.out
+    assert "xpub (mainnet):      xpub661MyMwAqRbcG" in captured.out
+
+
+def test_cli_derives_bip32_from_entropy_flow(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--derive-bip32",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert (
+        "Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        in captured.out
+    )
+    assert "6. Seed BIP39" in captured.out
+    assert "7. Master node BIP32" in captured.out

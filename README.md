@@ -6,7 +6,8 @@ CLI educativa para entender BIP39 paso a paso: desde entropia hexadecimal hasta 
 
 - Mostrar el proceso BIP39 de forma transparente y verificable.
 - Mantener separacion entre logica (`seed_steps/*.py`) y presentacion CLI (`seed_steps/cli.py`).
-- NO incluye aun BIP32, BIP84, xprv/xpub ni direcciones.
+- Incluye derivacion de master node BIP32 (xprv/xpub mainnet) desde seed BIP39.
+- Incluye derivacion de seed BIP39 (PBKDF2-HMAC-SHA512, 2048 iteraciones).
 
 ## Requisitos
 
@@ -58,15 +59,40 @@ Ejecucion como modulo (equivalente):
 python -m seed_steps --entropy 00000000000000000000000000000000
 ```
 
+Derivar seed desde mnemotecnica explicita:
+
+```bash
+seed-steps --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --passphrase TREZOR
+```
+
+Derivar seed usando la mnemotecnica generada en el flujo normal:
+
+```bash
+seed-steps --entropy 00000000000000000000000000000000 --derive-seed
+```
+
+Derivar master node BIP32 (xprv/xpub) desde seed disponible:
+
+```bash
+seed-steps --entropy 00000000000000000000000000000000 --derive-bip32
+```
+
+Derivar master node BIP32 desde mnemotecnica explicita:
+
+```bash
+seed-steps --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --passphrase TREZOR --derive-bip32
+```
+
 ### Salida educativa (modo detallado por defecto)
 
-La CLI organiza la explicacion en 5 secciones numeradas:
+La CLI organiza la explicacion en 5 secciones numeradas (6 cuando se deriva seed):
 
 1. Entropia
 2. Checksum
 3. Bits combinados
 4. Indices
 5. Mnemotecnica
+6. Seed BIP39 (opcional)
 
 Cada seccion incluye una linea de "Por que" para contexto pedagogico, metricas clave de bits y una tabla por palabra con posicion, bloque de 11 bits, indice y palabra final.
 

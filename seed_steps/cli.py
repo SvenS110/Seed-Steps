@@ -7,9 +7,11 @@ import sys
 from importlib.resources import as_file, files
 from pathlib import Path
 
+from seed_steps.bip32 import derive_bip32_master_node
 from seed_steps.bip39 import build_bip39_breakdown, load_wordlist
 from seed_steps.entropy import generate_entropy, parse_entropy_hex
 from seed_steps.format import group_binary
+from seed_steps.seed import build_bip39_seed_salt, derive_bip39_seed
 
 
 def _error_message(error_type: str, cause: str, guide: str) -> str:
@@ -37,6 +39,27 @@ def build_parser() -> argparse.ArgumentParser:
         dest="interactive",
         action="store_true",
         help="Inicia un asistente interactivo paso a paso.",
+    )
+    parser.add_argument(
+        "--mnemonic",
+        type=str,
+        help="Mnemotecnica explicita para derivar seed BIP39.",
+    )
+    parser.add_argument(
+        "--passphrase",
+        type=str,
+        default="",
+        help="Passphrase opcional BIP39 (se normaliza NFKD).",
+    )
+    parser.add_argument(
+        "--derive-seed",
+        action="store_true",
+        help="Deriva seed BIP39 desde mnemotecnica (explicativo).",
+    )
+    parser.add_argument(
+        "--derive-bip32",
+        action="store_true",
+        help="Deriva master key BIP32 (xprv/xpub) desde seed disponible.",
     )
     return parser
 
@@ -173,6 +196,40 @@ def _print_compact_breakdown(breakdown) -> None:
     print(f"   Mnemonic:            {breakdown.mnemonic}")
 
 
+def _print_seed_derivation(mnemonic: str, passphrase: str) -> None:
+    seed_bytes = derive_bip39_seed(mnemonic, passphrase)
+    salt = build_bip39_seed_salt(passphrase)
+
+    print()
+    print("6. Seed BIP39")
+    print("   Por que: Convierte la mnemotecnica en semilla binaria para BIP32.")
+    print(f"   Mnemonic usada:      {mnemonic}")
+    if passphrase:
+        print(f"   Passphrase:          {passphrase}")
+    else:
+        print("   Passphrase:          (vacia)")
+    print("   Salt PBKDF2:         'mnemonic' + passphrase")
+    print(f"   Salt efectivo:       {salt}")
+    print("   KDF:                 PBKDF2-HMAC-SHA512, iteraciones=2048")
+    print(f"   Seed (hex, 64 bytes): {seed_bytes.hex()}")
+
+
+def _print_bip32_derivation(seed_bytes: bytes) -> None:
+    master = derive_bip32_master_node(seed_bytes)
+    print()
+    print("7. Master node BIP32")
+    print(
+        "   Por que: BIP32 separa secreto (master key) y ruta de derivacion (chain code)."
+    )
+    print(f"   I = HMAC-SHA512:     {master.hmac_i.hex()}")
+    print(f"   IL (master key):     {master.master_private_key.hex()}")
+    print(f"   IR (chain code):     {master.chain_code.hex()}")
+    print(f"   Master private key:  {master.master_private_key.hex()}")
+    print(f"   Chain code:          {master.chain_code.hex()}")
+    print(f"   xprv (mainnet):      {master.xprv}")
+    print(f"   xpub (mainnet):      {master.xpub}")
+
+
 def run() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -205,6 +262,25 @@ def run() -> int:
 
     if args.interactive:
         return _run_interactive(wordlist)
+
+    if args.mnemonic:
+        _print_header()
+        seed_bytes = derive_bip39_seed(args.mnemonic, args.passphrase)
+        _print_seed_derivation(args.mnemonic, args.passphrase)
+        if args.derive_bip32:
+            try:
+                _print_bip32_derivation(seed_bytes)
+            except ValueError as exc:
+                print(
+                    _error_message(
+                        "DOMINIO BIP32",
+                        f"no se pudo derivar master node ({exc})",
+                        "verifica que la seed sea valida para BIP32",
+                    ),
+                    file=sys.stderr,
+                )
+                return 4
+        return 0
 
     try:
         entropy = (
@@ -239,6 +315,24 @@ def run() -> int:
         _print_compact_breakdown(breakdown)
     else:
         _print_detailed_breakdown(breakdown)
+
+    seed_bytes = None
+    if args.derive_seed or args.passphrase or args.derive_bip32:
+        seed_bytes = derive_bip39_seed(breakdown.mnemonic, args.passphrase)
+        _print_seed_derivation(breakdown.mnemonic, args.passphrase)
+    if args.derive_bip32:
+        try:
+            _print_bip32_derivation(seed_bytes)
+        except ValueError as exc:
+            print(
+                _error_message(
+                    "DOMINIO BIP32",
+                    f"no se pudo derivar master node ({exc})",
+                    "verifica que la seed sea valida para BIP32",
+                ),
+                file=sys.stderr,
+            )
+            return 4
     return 0
 
 
