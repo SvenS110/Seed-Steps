@@ -1,5 +1,5 @@
-Seed Steps - BIP39 Educational Breakdown
-============================================
+Seed Steps - De (BIP39) Entropia a la Direccion
+==================================================
 1. Entropia
    Por que: Es la fuente de aleatoriedad que determina toda la semilla.
    Entropia (hex):      00000000000000000000000000000000

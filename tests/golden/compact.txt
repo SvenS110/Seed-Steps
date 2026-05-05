@@ -1,5 +1,5 @@
-Seed Steps - BIP39 Educational Breakdown
-============================================
+Seed Steps - De (BIP39) Entropia a la Direccion
+==================================================
 1. Resumen
    Por que: Vista rapida para validar valores clave de BIP39.
    Entropia (hex):      00000000000000000000000000000000

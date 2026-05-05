@@ -198,15 +198,9 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
             "s",
             "",
             "s",
+            "s",
             "mainnet",
-            "s",
             "d",
-            "s",
-            "n",
-            "s",
-            "s",
-            "s",
-            "s",
             "s",
             "s",
         ]
@@ -229,6 +223,7 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
     assert "Fase E) Direccion" in captured.out
     assert "Fase F) Resumen final" in captured.out
     assert "Direccion final:" in captured.out
+    assert "Nota: en wizard se muestran valores COMPLETOS" in captured.out
 
 
 def test_cli_interactive_guided_retries_invalid_inputs(capsys, monkeypatch) -> None:
@@ -247,20 +242,13 @@ def test_cli_interactive_guided_retries_invalid_inputs(capsys, monkeypatch) -> N
             "s",
             "",
             "s",
+            "s",
             "devnet",
             "testnet",
-            "s",
             "m",
             "84'/0'/0'/0/0",
             "m",
             "m/84'/1'/0'/0/0",
-            "s",
-            "s",
-            "NOPE",
-            "s",
-            "s",
-            "s",
-            "s",
             "s",
             "s",
         ]
@@ -276,7 +264,6 @@ def test_cli_interactive_guided_retries_invalid_inputs(capsys, monkeypatch) -> N
     assert "Entrada invalida: Entropy hexadecimal invalida" in captured.out
     assert "Entrada invalida. Escribe mainnet o testnet." in captured.out
     assert "Ruta BIP32 invalida" in captured.out
-    assert "Revelacion cancelada. Se mantiene redaccion de secretos." in captured.out
     assert "Subpaso BIP39 2/5: Checksum" in captured.out
     assert "Fase B) Seed BIP39" in captured.out
     assert "Fase F) Resumen final" in captured.out
@@ -312,15 +299,9 @@ def test_cli_interactive_guided_manual_mnemonic_explains_bip39_limit(
             "s",
             "",
             "s",
+            "s",
             "mainnet",
-            "s",
             "d",
-            "s",
-            "n",
-            "s",
-            "s",
-            "s",
-            "s",
             "s",
             "s",
         ]

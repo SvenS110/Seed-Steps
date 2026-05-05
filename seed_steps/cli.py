@@ -142,8 +142,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _print_header() -> None:
-    print("Seed Steps - BIP39 Educational Breakdown")
-    print("=" * 44)
+    print("Seed Steps - De (BIP39) Entropia a la Direccion")
+    print("=" * 50)
 
 
 def _print_stage_entropy(breakdown) -> None:
@@ -406,18 +406,20 @@ def _print_phase_master_bip32(
     print("   - HMAC-SHA512('Bitcoin seed', seed)")
     print("   Que sale:")
     print(
-        f"   - I:                  {_display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)}"
+        f"   - I:                  {_display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)}  | Salida completa de 64 bytes del HMAC; base de todo el master node"
     )
     print(
-        f"   - IL (master key):    {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}"
+        f"   - IL (master key):    {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}  | Mitad izquierda (32 bytes): secreto maestro usado para firmar"
     )
     print(
-        f"   - IR (chain code):    {_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)}"
+        f"   - IR (chain code):    {_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)}  | Mitad derecha (32 bytes): entropy de derivacion para hijos"
     )
     print(
-        f"   - xprv:               {_display_sensitive(master.xprv, show_secrets=show_secrets)}"
+        f"   - xprv:               {_display_sensitive(master.xprv, show_secrets=show_secrets)}  | Serializacion extendida del nodo privado maestro"
     )
-    print(f"   - xpub:               {master.xpub}")
+    print(
+        f"   - xpub:               {master.xpub}  | Serializacion extendida del nodo publico maestro"
+    )
     return {"master": master}
 
 
@@ -430,7 +432,7 @@ def _print_phase_hd_path(master, path: str, *, show_secrets: bool) -> dict[str, 
     print("   Que operacion se hace:")
     print("   - Derivacion nivel por nivel")
     if not parsed:
-        print("   - m (sin derivacion)")
+        print("   - m (sin derivacion) | Se mantiene el nodo maestro en depth=0")
     for step in parsed:
         current = derive_bip32_path_from_node(current, f"m/{step.token}")
         index_label = (
@@ -438,7 +440,7 @@ def _print_phase_hd_path(master, path: str, *, show_secrets: bool) -> dict[str, 
         )
         hardened_label = "hardened" if step.hardened else "normal"
         print(
-            f"   - {step.token}: index={index_label}, tipo={hardened_label}, depth={current.depth}, fp_padre={current.parent_fingerprint.hex()}"
+            f"   - {step.token}: index={index_label}, tipo={hardened_label}, depth={current.depth}, fp_padre={current.parent_fingerprint.hex()}  | index=posicion local, tipo=regla de derivacion, depth=nivel en arbol, fp_padre=huella del padre"
         )
     print("   Que sale:")
     print(f"   - Nodo depth final:   {current.depth}")
@@ -591,7 +593,13 @@ def _print_detailed_breakdown(breakdown) -> None:
 def _run_interactive(wordlist: list[str]) -> int:
     _print_header()
     print("Bienvenido al wizard guiado 11.3 de Seed Steps.")
-    print("Cada etapa pide datos, valida entrada y confirma continuidad (S/N).")
+    print("Cada fase pide datos, valida entrada y muestra resultado antes de avanzar.")
+    print(
+        "Nota: en wizard se muestran valores COMPLETOS por preferencia didactica del usuario."
+    )
+    print(
+        "No uses material real; la politica segura por defecto sigue activa fuera del wizard."
+    )
 
     state: dict[str, object] = {
         "entropy": None,
@@ -649,26 +657,53 @@ def _run_interactive(wordlist: list[str]) -> int:
         elif stage_index == 1:
             passphrase = _prompt_passphrase()
             state["passphrase"] = passphrase
-            print("\nEtapa 2/5 completada: passphrase configurada")
-            print(f"- Passphrase: {_display_sensitive(passphrase, show_secrets=False)}")
+            seed_artifacts = _print_phase_seed_bip39(
+                mnemonic=str(state["mnemonic"]),
+                passphrase=passphrase,
+                show_secrets=True,
+            )
+            state.update(seed_artifacts)
+            print("\nEtapa 2/5 completada: seed BIP39 derivada")
 
         elif stage_index == 2:
-            network = _prompt_network()
-            state["network"] = network
-            print("\nEtapa 3/5 completada: red seleccionada")
-            print(f"- Red: {network}")
+            master_artifacts = _print_phase_master_bip32(
+                state["seed_bytes"], show_secrets=True
+            )
+            state.update(master_artifacts)
+            print("\nEtapa 3/5 completada: master BIP32 derivada")
 
         elif stage_index == 3:
+            network = _prompt_network()
+            state["network"] = network
             path = _prompt_hd_path(str(state["network"]))
             state["path"] = path
-            print("\nEtapa 4/5 completada: ruta HD definida")
-            print(f"- Ruta: {path}")
+            path_artifacts = _print_phase_hd_path(
+                state["master"],
+                path,
+                show_secrets=True,
+            )
+            state.update(path_artifacts)
+            print("\nEtapa 4/5 completada: ruta HD derivada")
 
         else:
-            show_secrets = _prompt_show_secrets()
-            state["show_secrets"] = show_secrets
-            print("\nEtapa 5/5 completada: politica de visualizacion")
-            print("- Secretos: visibles" if show_secrets else "- Secretos: redactados")
+            address_artifacts = _print_phase_address(
+                state["derived"],
+                str(state["network"]),
+                show_secrets=True,
+            )
+            state.update(address_artifacts)
+            _print_phase_final_summary(
+                mnemonic=str(state["mnemonic"]),
+                passphrase=str(state["passphrase"]),
+                path=str(state["path"]),
+                network=str(state["network"]),
+                seed_bytes=state["seed_bytes"],
+                master=state["master"],
+                derived=state["derived"],
+                final_addr=state["final_addr"],
+                show_secrets=True,
+            )
+            print("\nEtapa 5/5 completada: direccion y resumen final")
 
         action = _prompt_continue_with_options()
         if action == "cancel":
@@ -677,18 +712,7 @@ def _run_interactive(wordlist: list[str]) -> int:
         if action == "continue":
             stage_index += 1
 
-    try:
-        return _run_interactive_guided_pipeline(state)
-    except ValueError as exc:
-        print(
-            _error_message(
-                "DOMINIO BIP32",
-                f"no se pudo derivar flujo guiado fase por fase ({exc})",
-                "verifica mnemotecnica, passphrase, ruta y red",
-            ),
-            file=sys.stderr,
-        )
-        return 4
+    return 0
 
 
 def _print_compact_breakdown(breakdown) -> None:
@@ -732,13 +756,13 @@ def _print_bip32_derivation(seed_bytes: bytes, *, show_secrets: bool) -> None:
         "   Por que: BIP32 separa secreto (master key) y ruta de derivacion (chain code)."
     )
     print(
-        f"   I = HMAC-SHA512:     {_display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)}"
+        f"   I = HMAC-SHA512:     {_display_sensitive(master.hmac_i.hex(), show_secrets=show_secrets)}  | Digest completo de 64 bytes"
     )
     print(
-        f"   IL (master key):     {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}"
+        f"   IL (master key):     {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}  | 32 bytes izquierdos: private key maestra"
     )
     print(
-        f"   IR (chain code):     {_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)}"
+        f"   IR (chain code):     {_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets)}  | 32 bytes derechos: chain code del arbol"
     )
     print(
         f"   Master private key:  {_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets)}"
@@ -767,7 +791,9 @@ def _print_bip32_path_derivation(
     if show_steps:
         print("   Pasos:")
         if not parsed:
-            print("   - m (sin derivacion, se mantiene nodo master)")
+            print(
+                "   - m (sin derivacion, se mantiene nodo master) | depth=0 y sin hijo aplicado"
+            )
         for step in parsed:
             current = derive_bip32_path_from_node(current, f"m/{step.token}")
             index_label = (
@@ -777,7 +803,7 @@ def _print_bip32_path_derivation(
             )
             hardened_label = "hardened" if step.hardened else "normal"
             print(
-                f"   - {step.token}: index={index_label}, tipo={hardened_label}, depth={current.depth}, fp_padre={current.parent_fingerprint.hex()}"
+                f"   - {step.token}: index={index_label}, tipo={hardened_label}, depth={current.depth}, fp_padre={current.parent_fingerprint.hex()} | index=numero hijo, tipo=hardened/normal, depth=nivel actual, fp_padre=huella del nodo padre"
             )
     else:
         current = derive_bip32_path_from_node(current, path)
