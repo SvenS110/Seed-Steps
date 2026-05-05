@@ -227,7 +227,7 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
 
     assert exit_code == 0
     assert captured.err == ""
-    assert "aula practica guiada" in captured.out
+    assert "Bienvenido a Seed Steps by SvenS101" in captured.out
     assert "Etapa 1/5 completada: origen seleccionado" in captured.out
     assert "Subpaso BIP39 1/5: Entropia" in captured.out
     assert "Objetivo del paso:" in captured.out

@@ -201,16 +201,23 @@ def _print_stage_entropy(breakdown) -> None:
     print("1. Entropia")
     print("   Por que: Es la fuente de aleatoriedad que determina toda la semilla.")
     print(f"   Entropia (hex):      {breakdown.entropy_hex}")
-    print(f"   Entropia (bits):     {group_binary(breakdown.entropy_bits, 8)}")
-    print(f"   Tamano de entropia:  {len(breakdown.entropy_bits)} bits")
+    print(f"   Entropia (bits):     {_colorize(breakdown.entropy_bits, COLOR_ENTROPY)}")
+    print(
+        f"   Tamano de entropia:  {_colorize(str(len(breakdown.entropy_bits)), COLOR_ENTROPY)} bits"
+    )
 
 
 def _print_stage_checksum(breakdown) -> None:
     print("2. Checksum")
     print("   Por que: Detecta errores al escribir o transcribir la mnemotecnica.")
-    print("   Regla BIP39: checksum = primeros ENT/32 bits de SHA-256(entropia).")
+    print("   Regla BIP39: tomamos SHA-256(entropia) y usamos solo los primeros bits.")
+    print(
+        "   Calculo didactico: si la entropia tiene 128 bits, 128/32=4; por eso el checksum usa 4 bits."
+    )
     print(f"   SHA256(entropia):    {breakdown.sha256_hex}")
-    print(f"   Bits de checksum:    {breakdown.checksum_bits}")
+    print(
+        f"   Bits de checksum:    {_colorize(breakdown.checksum_bits, COLOR_CHECKSUM)}"
+    )
     print(f"   Tamano checksum:     {len(breakdown.checksum_bits)} bits")
 
 
@@ -498,17 +505,17 @@ def _run_bip39_guided_substeps(
                 "   Que debes observar: tamano de bits y que la fuente coincide con lo elegido."
             )
             print(
-                f"   Fuente usada:        {source_label} (wizard) | tamano elegido: {entropy_bits} bits"
+                f"   Fuente usada:        {source_label} (wizard) | tamano elegido: {_colorize(str(entropy_bits), COLOR_ENTROPY)} bits"
             )
         elif index == 1:
             _print_stage_checksum(breakdown)
             ent_bits = len(breakdown.entropy_bits)
             checksum_bits = ent_bits // 32
             print(
-                "   Que debes observar: ENT/32 define cuantos bits de checksum se agregan."
+                "   Que debes observar: dividir los bits de entropia entre 32 define cuantos bits de checksum se agregan."
             )
             print(
-                f"   Calculo docente:     ENT={ent_bits} => ENT/32={checksum_bits} bits desde SHA-256(entropia)"
+                f"   Calculo docente:     {ent_bits} bits / 32 = {checksum_bits} bits de checksum, tomados del inicio de SHA-256(entropia)"
             )
         elif index == 2:
             _print_stage_combined_bits(breakdown, use_color=True)
@@ -684,6 +691,9 @@ def _print_phase_master_bip32(
     print()
     print("   Que operacion se hace:")
     print(f"   - Clave HMAC:         {_colorize('Bitcoin seed', COLOR_IR)}")
+    print(
+        "   - Origen de esa clave: constante fija del estandar BIP32 para derivar la master key."
+    )
     print()
     print(f"   - Entrada HMAC:       {_colorize(seed_hex, COLOR_SEED)}")
     print()
@@ -691,17 +701,22 @@ def _print_phase_master_bip32(
     print()
     print("   Que sale:")
     print(f"   - I:                  {i_colored}  | IL(izq, azul) + IR(der, morado)")
+    print()
     print(
         f"   - IL (master key):    {_colorize(il_hex, COLOR_IL)}  | Mitad izquierda: clave privada raiz"
     )
+    print()
     print(
         f"   - IR (chain code):    {_colorize(ir_hex, COLOR_IR)}  | Mitad derecha: cadena que guia derivaciones"
     )
+    print()
     print(f"   - Payload xprv:       {_colorize(xprv_payload, COLOR_XPRV)}")
     print(f"   - Payload xpub:       {_colorize(xpub_payload, COLOR_XPUB)}")
+    print()
     print(
         f"   - xprv:               {_colorize(_display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV)}  | Empaquetado del nodo privado maestro"
     )
+    print()
     print(
         f"   - xpub:               {_colorize(master.xpub, COLOR_XPUB)}  | Version publica para derivar/consultar sin firmar"
     )
@@ -750,7 +765,7 @@ def _print_phase_hd_path(
     for micro_index, step in enumerate(parsed, start=1):
         _prompt_micro_operation(
             number=micro_index,
-            input_data=f"nodo depth={current.depth} + paso={step.token}",
+            input_data=f"nodo nivel={current.depth} + paso={step.token}",
             operation="CKDpriv segun tipo hardened/normal",
             output_data="nodo hijo del siguiente nivel",
             enable=interactive_micro_steps,
@@ -761,13 +776,14 @@ def _print_phase_hd_path(
         )
         hardened_label = "hardened" if step.hardened else "normal"
         print(
-            f"   - {step.token}: index={index_label}, tipo={hardened_label}, depth={current.depth}, fp_padre={current.parent_fingerprint.hex()}  | avanzamos un nivel del mapa HD"
+            f"   - {step.token}: index={index_label}, tipo={hardened_label}, nivel={current.depth}, fp_padre={current.parent_fingerprint.hex()}  | fp_padre=huella corta (4 bytes) del nodo padre; avanzamos un nivel del mapa HD"
         )
     print("   Que sale:")
     print(f"   - Nodo depth final:   {current.depth}")
     print(
         f"   - xprv derivado:      {_colorize(_display_sensitive(current.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
     )
+    print()
     print(f"   - xpub derivado:      {_colorize(current.xpub, COLOR_XPUB)}")
     return {"derived": current}
 
@@ -828,7 +844,9 @@ def _print_phase_address(
     )
     print("   Que sale:")
     print(f"   - HASH160:            {_colorize(hash160_hex, COLOR_IR)}")
+    print()
     print(f"   - Witness:            {_colorize(witness_line, COLOR_CHECKSUM)}")
+    print()
     print(f"   - Direccion final:    {_colorize(p2wpkh.address, COLOR_FINAL_ADDRESS)}")
     return {"final_addr": p2wpkh}
 
@@ -892,6 +910,7 @@ def _print_phase_final_summary(
     print(
         f"   - Direccion final:    {_colorize(final_addr.address, COLOR_FINAL_ADDRESS)}"
     )
+    print()
     print("   ADVERTENCIA: EDUCATIVO, NO CUSTODIA REAL")
 
 
@@ -987,7 +1006,7 @@ def _print_detailed_breakdown(breakdown) -> None:
 
 def _run_interactive(wordlist: list[str]) -> int:
     _print_header()
-    print("Bienvenido al aula practica guiada de Seed Steps.")
+    print("Bienvenido a Seed Steps by SvenS101")
     print(
         "Avanzamos por pasos cortos: eliges entrada, ves operacion y confirmas salida."
     )

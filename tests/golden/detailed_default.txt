@@ -3,14 +3,15 @@ Seed Steps - De (BIP39) Entropia a la Direccion
 1. Entropia
    Por que: Es la fuente de aleatoriedad que determina toda la semilla.
    Entropia (hex):      00000000000000000000000000000000
-   Entropia (bits):     00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-   Tamano de entropia:  128 bits
+   Entropia (bits):     [96m00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000[0m
+   Tamano de entropia:  [96m128[0m bits
 
 2. Checksum
    Por que: Detecta errores al escribir o transcribir la mnemotecnica.
-   Regla BIP39: checksum = primeros ENT/32 bits de SHA-256(entropia).
+   Regla BIP39: tomamos SHA-256(entropia) y usamos solo los primeros bits.
+   Calculo didactico: si la entropia tiene 128 bits, 128/32=4; por eso el checksum usa 4 bits.
    SHA256(entropia):    374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb
-   Bits de checksum:    0011
+   Bits de checksum:    [93m0011[0m
    Tamano checksum:     4 bits
 
 3. Bits combinados
