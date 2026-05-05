@@ -329,6 +329,44 @@ def _render_math_trace(trace: MathTrace) -> None:
         print(f"   - {trace.nota_tecnica}")
 
 
+def _render_integrated_math_for_substep(
+    traces: list[MathTrace],
+    *,
+    next_input_label: str,
+    next_input_value: str,
+) -> None:
+    if not traces:
+        return
+
+    print("   Datos de entrada:")
+    for trace in traces:
+        for item in trace.datos_entrada:
+            print(f"   - {item}")
+
+    print("   Formula matematica:")
+    for trace in traces:
+        for item in trace.formulas:
+            print(f"   - {item}")
+
+    print("   Sustitucion con valores reales:")
+    for trace in traces:
+        for item in trace.sustituciones:
+            print(f"   - {item}")
+
+    dev_items = [item for trace in traces for item in trace.desarrollo_intermedio]
+    if dev_items:
+        print("   Desarrollo intermedio:")
+        for item in dev_items:
+            print(f"   - {item}")
+
+    print("   Resultado:")
+    for trace in traces:
+        for item in trace.resultados:
+            print(f"   - {item}")
+
+    print(f"   Salida hacia siguiente subpaso: {next_input_label} = {next_input_value}")
+
+
 def _build_bip39_math_traces(breakdown) -> list[MathTrace]:
     ent = len(breakdown.entropy_bits)
     cs = len(breakdown.checksum_bits)
@@ -409,6 +447,7 @@ def _build_bip39_math_traces(breakdown) -> list[MathTrace]:
             sustituciones=[f"total = {ent} + {cs}"],
             resultados=[
                 f"total_bits = {ent + cs}",
+                f"full_bits_length = {ent + cs} bits",
                 f"entropy_plus_checksum = {breakdown.entropy_plus_checksum_bits}",
             ],
         ),
@@ -655,6 +694,15 @@ def _run_bip39_guided_substeps(
         "Subpaso BIP39 5/5: Mnemotecnica",
     ]
 
+    all_traces = _build_bip39_math_traces(breakdown)
+    traces_by_substep = {
+        0: all_traces[0:3],
+        1: all_traces[3:6],
+        2: all_traces[6:7],
+        3: all_traces[7:9],
+        4: all_traces[9:11],
+    }
+
     index = 0
     while index < len(substeps):
         title = substeps[index]
@@ -669,6 +717,11 @@ def _run_bip39_guided_substeps(
             print(
                 f"   Fuente usada:        {source_label} (wizard) | tamano elegido: {_colorize(str(entropy_bits), COLOR_ENTROPY)} bits"
             )
+            _render_integrated_math_for_substep(
+                traces_by_substep[index],
+                next_input_label="entropy_bits",
+                next_input_value=breakdown.entropy_bits,
+            )
         elif index == 1:
             _print_stage_checksum(breakdown)
             ent_bits = len(breakdown.entropy_bits)
@@ -679,20 +732,40 @@ def _run_bip39_guided_substeps(
             print(
                 f"   Calculo docente:     {ent_bits} bits / 32 = {checksum_bits} bits de checksum, tomados del inicio de SHA-256(entropia)"
             )
+            _render_integrated_math_for_substep(
+                traces_by_substep[index],
+                next_input_label="checksum_bits",
+                next_input_value=breakdown.checksum_bits,
+            )
         elif index == 2:
             _print_stage_combined_bits(breakdown, use_color=True)
             print(
                 "   Que debes observar: cian=entropia y amarillo=checksum dentro del mismo flujo de bits."
+            )
+            _render_integrated_math_for_substep(
+                traces_by_substep[index],
+                next_input_label="entropy_plus_checksum_bits",
+                next_input_value=breakdown.entropy_plus_checksum_bits,
             )
         elif index == 3:
             _print_stage_indices_colored(breakdown)
             print(
                 "   Que debes observar: cada bloque de 11 bits se convierte en un indice de la wordlist."
             )
+            _render_integrated_math_for_substep(
+                traces_by_substep[index],
+                next_input_label="indices",
+                next_input_value=str([step.index for step in breakdown.steps]),
+            )
         else:
             _print_stage_mnemonic_colored(breakdown)
             print(
                 "   Que debes observar: el orden de palabras depende exactamente del orden de bloques."
+            )
+            _render_integrated_math_for_substep(
+                traces_by_substep[index],
+                next_input_label="mnemonic",
+                next_input_value=breakdown.mnemonic,
             )
 
         action = (
@@ -703,13 +776,6 @@ def _run_bip39_guided_substeps(
         if action == "retry":
             continue
         index += 1
-
-    for trace in _build_bip39_math_traces(breakdown):
-        _render_math_trace(trace)
-        if pause_between_steps:
-            action = _prompt_continue_with_options()
-            if action == "cancel":
-                return "cancel"
 
     return "continue"
 

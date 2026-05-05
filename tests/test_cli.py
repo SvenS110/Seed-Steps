@@ -397,7 +397,14 @@ def test_cli_wizard_no_pause_entropy_zero_shows_known_bip39_math_trace(
     assert "ENT = 128 bits" in captured.out
     assert "CS = 4 bits" in captured.out
     assert "checksum = 0011" in captured.out
+    assert "full_bits_length = 132 bits" in captured.out
     assert "wordlist[3] = about" in captured.out
+    assert (
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        in captured.out
+    )
+    assert "Traza 1)" not in captured.out
+    assert "Traza " not in captured.out
 
 
 def test_cli_derives_seed_from_explicit_mnemonic(capsys, monkeypatch) -> None:
