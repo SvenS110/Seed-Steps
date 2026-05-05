@@ -227,7 +227,8 @@ def test_cli_interactive_guided_flow_happy_path(capsys, monkeypatch) -> None:
 
     assert exit_code == 0
     assert captured.err == ""
-    assert "Bienvenido a Seed Steps by SvenS101" in captured.out
+    assert "Bienvenido a " in captured.out
+    assert " by SvenS101" in captured.out
     assert "Etapa 1/5 completada: origen seleccionado" in captured.out
     assert "Subpaso BIP39 1/5 — Entropia" in captured.out
     assert "Objetivo" in captured.out
@@ -447,6 +448,52 @@ def test_cli_wizard_phase_d_has_single_clean_substep_flow(capsys, monkeypatch) -
     assert "Entrada: entrada" not in captured.out
     assert "Operacion:" not in captured.out
     assert "Salida: salida" not in captured.out
+
+
+def test_cli_wizard_summary_and_bip32_hmac_key_narrative_no_color(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--wizard",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--passphrase",
+            "TREZOR",
+            "--no-pause",
+            "--no-color",
+        ],
+    )
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "\x1b[" not in captured.out
+    assert "Bienvenido a Seed Steps by SvenS101" in captured.out
+    assert "Subpaso 1/1 — Consolidado final" not in captured.out
+    assert "Inputs usados:" in captured.out
+    assert "Outputs clave:" in captured.out
+    assert 'hmac_key = "Bitcoin seed"' in captured.out
+    assert (
+        '"Bitcoin seed" NO es la seed del usuario ni contrasena; es cadena ASCII fija BIP32.'
+        in captured.out
+    )
+    assert (
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        in captured.out
+    )
+    assert "direccion final = bc1" in captured.out
+
+    assert "- seed = c55257c360c07c72" in captured.out
+    assert "- IL master = cbedc75b0d6412c8" in captured.out
+    assert "- IR master = a3fa8c983223306d" in captured.out
+    assert "- xprv master = xprv9s21ZrQH143K3" in captured.out
+    assert "- xpub master = xpub661MyMwAqRbcG" in captured.out
 
 
 def test_cli_colors_respect_no_color_and_default_mode(capsys, monkeypatch) -> None:

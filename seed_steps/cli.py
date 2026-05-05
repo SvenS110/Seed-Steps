@@ -68,7 +68,7 @@ COLOR_ENTROPY = "\033[96m"
 COLOR_CHECKSUM = "\033[93m"
 COLOR_WORD = "\033[38;5;208m"
 COLOR_PASSPHRASE = "\033[95m"
-COLOR_SEED = "\033[92m"
+COLOR_SEED = "\033[93m"
 COLOR_IL = "\033[94m"
 COLOR_IR = "\033[35m"
 COLOR_XPRV = "\033[91m"
@@ -183,6 +183,12 @@ def _print_substep_sections(
     result: list[str],
     next_step: list[str],
 ) -> None:
+    def _print_bullet(item: str) -> None:
+        lines = item.splitlines() or [""]
+        print(f"- {lines[0]}")
+        for continuation in lines[1:]:
+            print(f"    {continuation}")
+
     sections = [
         ("Objetivo", objective),
         ("Que es", what_is),
@@ -197,7 +203,7 @@ def _print_substep_sections(
     for title, items in sections:
         _print_substep_section(title)
         for item in items:
-            print(f"- {item}")
+            _print_bullet(item)
 
 
 def _pbkdf2_u_sequence(
@@ -1080,9 +1086,8 @@ def _print_phase_seed_bip39(
                 math=[ts.formula("password = mnemonic_norm_utf8")],
                 substitution=[ts.formula("password = NFKD(mnemonic)")],
                 development=[
-                    "mnemotecnica (agrupada):",
-                    "  "
-                    + "\n  ".join(
+                    "mnemotecnica (agrupada):\n"
+                    + "\n".join(
                         [
                             " ".join(mnemonic.split()[i : i + 4])
                             for i in range(0, len(mnemonic.split()), 4)
@@ -1107,8 +1112,7 @@ def _print_phase_seed_bip39(
                     ts.formula(f"len(password) = {len(mnemonic_bytes)} bytes")
                 ],
                 development=[
-                    "password bytes (hex):",
-                    "  " + format_hex_bytes(mnemonic_bytes),
+                    "password bytes (hex):\n" + format_hex_bytes(mnemonic_bytes),
                 ],
                 result=["salida -> password para PBKDF2"],
                 next_step=["Procesar passphrase bajo misma regla NFKD."],
@@ -1151,23 +1155,22 @@ def _print_phase_seed_bip39(
                 substitution=[ts.formula(f"salt = 'mnemonic' + '{passphrase}'")],
                 development=[
                     "salt (texto): " + _colorize(salt, COLOR_PASSPHRASE),
-                    "salt bytes (hex):",
-                    "  " + format_hex_bytes(salt_bytes),
+                    "salt bytes (hex):\n" + format_hex_bytes(salt_bytes),
                 ],
                 result=["salida -> salt para PBKDF2"],
                 next_step=["Ejecutar PBKDF2-HMAC-SHA512 con 2048 iteraciones."],
             )
         elif index == 5:
             dev_lines = [
-                f"iteracion 0001 -> U_1  = {_colorize(format_long_hex(u_values[0].hex(), groups_per_line=2), COLOR_SEED)}",
-                f"iteracion 0002 -> U_2  = {_colorize(format_long_hex(u_values[1].hex(), groups_per_line=2), COLOR_SEED)}",
-                f"iteracion 0003 -> U_3  = {_colorize(format_long_hex(u_values[2].hex(), groups_per_line=2), COLOR_SEED)}",
+                f"iteracion 0001 -> U_1  = {format_long_hex(u_values[0].hex(), groups_per_line=2)}",
+                f"iteracion 0002 -> U_2  = {format_long_hex(u_values[1].hex(), groups_per_line=2)}",
+                f"iteracion 0003 -> U_3  = {format_long_hex(u_values[2].hex(), groups_per_line=2)}",
                 "...",
                 "2042 iteraciones intermedias omitidas",
                 "...",
-                f"iteracion 2046 -> U_2046 = {_colorize(format_long_hex(u_values[2045].hex(), groups_per_line=2), COLOR_SEED)}",
-                f"iteracion 2047 -> U_2047 = {_colorize(format_long_hex(u_values[2046].hex(), groups_per_line=2), COLOR_SEED)}",
-                f"iteracion 2048 -> U_2048 = {_colorize(format_long_hex(u_values[2047].hex(), groups_per_line=2), COLOR_SEED)}",
+                f"iteracion 2046 -> U_2046 = {format_long_hex(u_values[2045].hex(), groups_per_line=2)}",
+                f"iteracion 2047 -> U_2047 = {format_long_hex(u_values[2046].hex(), groups_per_line=2)}",
+                f"iteracion 2048 -> U_2048 = {format_long_hex(u_values[2047].hex(), groups_per_line=2)}",
                 ts.formula("T_1 = U_1 XOR U_2 XOR ... XOR U_2048"),
                 ts.formula("len(seed) = 64 bytes"),
             ]
@@ -1213,8 +1216,8 @@ def _print_phase_seed_bip39(
                 math=[ts.formula("DK = T_1")],
                 substitution=[ts.formula("seed = PBKDF2(..., dklen=64) = T_1")],
                 development=[
-                    "seed final (hex agrupado):",
-                    "  " + _colorize(format_long_hex(seed_display), COLOR_SEED),
+                    "seed final (hex agrupado):\n"
+                    + _colorize(format_long_hex(seed_display), COLOR_SEED),
                 ],
                 result=[
                     f"seed (hex, 64 bytes) = {_colorize(seed_display, COLOR_SEED)}"
@@ -1288,8 +1291,8 @@ def _print_phase_master_bip32(
                 math=[ts.formula("mensaje = seed")],
                 substitution=[ts.formula("len(seed) = 64")],
                 development=[
-                    "seed agrupada:",
-                    "  " + _colorize(format_long_hex(seed_hex), COLOR_SEED),
+                    "seed agrupada:\n"
+                    + _colorize(format_long_hex(seed_hex), COLOR_SEED),
                 ],
                 result=["salida -> mensaje para HMAC"],
                 next_step=["Aplicar HMAC-SHA512 con clave fija 'Bitcoin seed'."],
@@ -1300,12 +1303,16 @@ def _print_phase_master_bip32(
                 what_is=["HMAC-SHA512(clave, mensaje)."],
                 why=["Genera material para clave privada y chain code."],
                 inputs=[
-                    format_key_material("key", "Bitcoin seed", color=COLOR_IR),
-                    format_key_material("msg", seed_hex, color=COLOR_SEED),
+                    format_key_material("hmac_key", '"Bitcoin seed"', color=COLOR_IR),
+                    format_key_material("data", seed_hex, color=COLOR_SEED),
                 ],
-                math=[ts.formula("I = HMAC-SHA512('Bitcoin seed', seed)")],
+                math=[ts.formula('I = HMAC-SHA512(key="Bitcoin seed", data=seed)')],
                 substitution=[ts.formula("I = IL || IR")],
-                development=["I (hex, 64 bytes):", "  " + i_colored],
+                development=[
+                    '"Bitcoin seed" NO es la seed del usuario ni contrasena; es cadena ASCII fija BIP32.',
+                    "Sirve como separacion de dominio estandar.",
+                    "I (hex, 64 bytes):\n" + i_colored,
+                ],
                 result=["salida -> I para particionar"],
                 next_step=["Partir I en IL (izq) y IR (der)."],
             )
@@ -1683,48 +1690,41 @@ def _print_phase_final_summary(
 ) -> None:
     print("\nFase F) Resumen final")
     print(f"{ts.dim('━' * 88)}")
-    print(ts.bright_white("Subpaso 1/1 — Consolidado final"))
-    _print_substep_section("Objetivo")
-    print("- Consolidar entradas y salidas clave del recorrido.")
-    _print_substep_section("Que es")
-    print("- Snapshot final reproducible del flujo ENT -> BIP39 -> BIP32 -> direccion.")
-    _print_substep_section("Por que importa")
-    print("- Con estos mismos datos siempre obtienes exactamente el mismo resultado.")
-    _print_substep_section("Datos de entrada")
+    print(ts.bright_white("Inputs usados:"))
     colored_mnemonic = " ".join(
         _colorize(word, COLOR_WORD) for word in mnemonic.split()
     )
-    print(f"- Inputs:\n  - mnemonic = {colored_mnemonic}")
+    print(f"- mnemonic = {colored_mnemonic}")
     print(
-        f"  - passphrase = {_colorize(_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets), COLOR_PASSPHRASE)}"
+        f"- passphrase = {_colorize(_display_sensitive(passphrase or '(vacia)', show_secrets=show_secrets), COLOR_PASSPHRASE)}"
     )
-    print(f"  - path = {path}")
-    print(f"  - network = {network}")
-    _print_substep_section("Resultado")
+    print(f"- path = {path}")
+    print(f"- network = {network}")
+
+    print()
+    print(ts.bright_white("Outputs clave:"))
     print(
-        f"- Outputs:\n  - seed = {_colorize(format_long_hex(_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), groups_per_line=2), COLOR_SEED)}"
-    )
-    print(
-        f"  - IL master = {_colorize(format_long_hex(_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets), groups_per_line=2), COLOR_IL)}"
-    )
-    print(
-        f"  - IR master = {_colorize(format_long_hex(_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets), groups_per_line=2), COLOR_IR)}"
+        f"- seed = {_colorize(_display_sensitive(seed_bytes.hex(), show_secrets=show_secrets), COLOR_SEED)}"
     )
     print(
-        f"  - xprv master = {_colorize(format_long_hex(_display_sensitive(master.xprv, show_secrets=show_secrets), hex_per_group=16, groups_per_line=3), COLOR_XPRV)}"
+        f"- IL master = {_colorize(_display_sensitive(master.master_private_key.hex(), show_secrets=show_secrets), COLOR_IL)}"
     )
     print(
-        f"  - xpub master = {_colorize(format_long_hex(master.xpub, hex_per_group=16, groups_per_line=3), COLOR_XPUB)}"
+        f"- IR master = {_colorize(_display_sensitive(master.chain_code.hex(), show_secrets=show_secrets), COLOR_IR)}"
     )
     print(
-        f"  - xprv derivado = {_colorize(format_long_hex(_display_sensitive(derived.xprv, show_secrets=show_secrets), hex_per_group=16, groups_per_line=3), COLOR_XPRV)}"
+        f"- xprv master = {_colorize(_display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
     )
+    print(f"- xpub master = {_colorize(master.xpub, COLOR_XPUB)}")
     print(
-        f"  - xpub derivado = {_colorize(format_long_hex(derived.xpub, hex_per_group=16, groups_per_line=3), COLOR_XPUB)}"
+        f"- xprv derivado = {_colorize(_display_sensitive(derived.xprv, show_secrets=show_secrets), COLOR_XPRV)}"
     )
-    print(f"  - direccion final = {_colorize(final_addr.address, COLOR_FINAL_ADDRESS)}")
-    _print_substep_section("Siguiente paso")
-    print("- ADVERTENCIA: EDUCATIVO, NO CUSTODIA REAL")
+    print(f"- xpub derivado = {_colorize(derived.xpub, COLOR_XPUB)}")
+    print(f"- direccion final = {_colorize(final_addr.address, COLOR_FINAL_ADDRESS)}")
+
+    print()
+    print(ts.warning("ADVERTENCIA:"))
+    print("- EDUCATIVO, NO CUSTODIA REAL")
 
 
 def _run_interactive_guided_pipeline(state: dict[str, object]) -> int:
@@ -1818,10 +1818,14 @@ def _print_detailed_breakdown(breakdown) -> None:
 
 
 def _run_interactive(
-    wordlist: list[str], *, preset_entropy: bytes | None = None, no_pause: bool = False
+    wordlist: list[str],
+    *,
+    preset_entropy: bytes | None = None,
+    no_pause: bool = False,
+    default_passphrase: str = "",
 ) -> int:
     _print_header()
-    print(ts.bright_white("Bienvenido a Seed Steps by SvenS101"))
+    print(f"Bienvenido a {ts.orange('Seed Steps')} by SvenS101")
     print(
         "Avanzamos por pasos cortos: eliges entrada, ves operacion y confirmas salida."
     )
@@ -1903,7 +1907,7 @@ def _run_interactive(
             continue
 
         elif stage_index == 1:
-            passphrase = "" if no_pause else _prompt_passphrase()
+            passphrase = default_passphrase if no_pause else _prompt_passphrase()
             state["passphrase"] = passphrase
             try:
                 seed_artifacts = _print_phase_seed_bip39(
@@ -2424,6 +2428,7 @@ def run() -> int:
             wordlist,
             preset_entropy=preset_entropy,
             no_pause=args.no_pause,
+            default_passphrase=args.passphrase,
         )
 
     show_secrets = args.show_secrets and not args.no_secrets
