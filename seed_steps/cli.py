@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hmac
 import hashlib
-import os
 import sys
 from importlib.resources import as_file, files
 from pathlib import Path
@@ -2513,7 +2512,7 @@ def _print_full_journey(
 def run() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    ts.set_enabled(not args.no_color and os.getenv("NO_COLOR") is None)
+    ts.set_enabled(ts.should_use_color(no_color_flag=args.no_color))
 
     wordlist_path = files("seed_steps").joinpath("data/english.txt")
 

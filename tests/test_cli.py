@@ -51,6 +51,7 @@ def _assert_matches_golden(output: str, filename: str) -> None:
 
 
 def test_cli_detailed_output_by_default(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -539,6 +540,7 @@ def test_cli_wizard_summary_raw_appends_plain_block(capsys, monkeypatch) -> None
 
 
 def test_cli_colors_respect_no_color_and_default_mode(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
     base_argv = [
         "seed-steps",
         "--wizard",

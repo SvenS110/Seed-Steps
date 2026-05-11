@@ -2,7 +2,22 @@
 
 from __future__ import annotations
 
+import os
+import sys
+
 _ENABLED = True
+
+
+def should_use_color(no_color_flag: bool = False) -> bool:
+    if no_color_flag:
+        return False
+    if "NO_COLOR" in os.environ:
+        return False
+    if os.getenv("TERM") == "dumb":
+        return False
+    if not sys.stdout.isatty():
+        return False
+    return True
 
 
 def set_enabled(enabled: bool) -> None:
