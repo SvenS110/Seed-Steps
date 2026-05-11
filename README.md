@@ -134,12 +134,16 @@ seed-steps --wizard
 
 #### Windows PowerShell
 
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
+En Windows usamos `py -3.11` de forma explicita para evitar que el Python Launcher seleccione una version antigua o el alias de Microsoft Store. Si `py -3.11 --version` falla, instala Python 3.11 o superior desde python.org y vuelve a ejecutar el comando. Como diagnostico opcional, `py -0p` lista las versiones detectadas por Python Launcher.
 
-py -m pip install --upgrade pip
-py -m pip install -e ".[dev]"
+```powershell
+py -3.11 --version
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python --version
+
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 
 seed-steps --wizard
 
@@ -161,12 +165,16 @@ Después repite:
 
 #### Windows CMD
 
-```bat
-py -m venv .venv
-.venv\Scripts\activate.bat
+En Windows usamos `py -3.11` de forma explicita para evitar que el Python Launcher seleccione una version antigua o el alias de Microsoft Store. Si `py -3.11 --version` falla, instala Python 3.11 o superior desde python.org y vuelve a ejecutar el comando. Como diagnostico opcional, `py -0p` lista las versiones detectadas por Python Launcher.
 
-py -m pip install --upgrade pip
-py -m pip install -e ".[dev]"
+```bat
+py -3.11 --version
+py -3.11 -m venv .venv
+.venv\Scripts\activate.bat
+python --version
+
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 
 seed-steps --wizard
 
