@@ -192,11 +192,24 @@ seed-steps --compact
 # 3) Wizard interactivo
 seed-steps --wizard
 
-# 4) Pipeline completo: BIP39 -> seed -> BIP32 -> direccion
+# 4) Modo meetup (condensado e interactivo)
+seed-steps --tamarit
+
+# 5) Pipeline completo: BIP39 -> seed -> BIP32 -> direccion
 seed-steps --full-journey --path "m/84'/0'/0'/0/0" --network mainnet
 
-# 5) Derivar seed y nodo maestro desde mnemotecnica explicita
+# 6) Derivar seed y nodo maestro desde mnemotecnica explicita
 seed-steps --mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --derive-seed --derive-bip32
+```
+
+## Modo meetup
+
+`--tamarit` activa una variante del wizard con decisiones interactivas obligatorias y presentacion mas condensada (menos pausas entre subpasos).
+
+```bash
+seed-steps --tamarit
+seed-steps --tamarit --no-color
+seed-steps --tamarit --no-pause
 ```
 
 ## Ejemplo deterministico (entropia cero)
@@ -221,6 +234,7 @@ abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon 
 | `--compact`                 | switch | Salida compacta del flujo BIP39.                     |
 | `--tui`                     | switch | Vista educativa por paneles (read-only).             |
 | `--interactive`, `--wizard` | switch | Inicia asistente interactivo.                        |
+| `--tamarit`                 | switch | Modo meetup: wizard condensado e interactivo.        |
 | `--no-pause`                | switch | En wizard, desactiva pausas entre pasos.             |
 | `--no-color`                | switch | Desactiva ANSI en toda la salida.                    |
 | `--mnemonic`                | `str`  | Mnemotecnica explicita de entrada.                   |

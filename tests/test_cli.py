@@ -369,6 +369,190 @@ def test_cli_interactive_guided_manual_mnemonic_explains_bip39_limit(
     assert "Fase B) Seed BIP39" in captured.out
 
 
+def test_cli_parser_accepts_tamarit_and_shows_meetup_header(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["seed-steps", "--tamarit"])
+
+    inputs = iter(["a", "128", "n", "c"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Modo meetup activado" in captured.out
+
+
+def test_cli_wizard_without_tamarit_keeps_previous_intro(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["seed-steps", "--wizard"])
+
+    inputs = iter(["a", "128", "n", "c"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Modo meetup activado" not in captured.out
+
+
+def test_cli_tamarit_keeps_network_and_manual_path_decisions(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tamarit",
+            "--no-pause",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-color",
+        ],
+    )
+
+    inputs = iter(["", "testnet", "m", "m/84'/1'/0'/0/1"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "- network = testnet" in captured.out
+    assert "- path = m/84'/1'/0'/0/1" in captured.out
+    assert "direccion final = tb1" in captured.out
+
+
+def test_cli_tamarit_no_pause_has_zero_pause_prompts(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tamarit",
+            "--no-pause",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-color",
+        ],
+    )
+
+    inputs = iter(["", "mainnet", "d"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Listo este paso. Continuamos al siguiente?" not in captured.out
+    assert "Subpaso BIP39 1/5" not in captured.out
+    assert "BIP39 condensado" in captured.out
+
+
+def test_cli_tamarit_without_network_still_prompts_network(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tamarit",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-color",
+            "--no-pause",
+        ],
+    )
+
+    calls = {"network": 0}
+
+    def _fake_prompt_network() -> str:
+        calls["network"] += 1
+        return "mainnet"
+
+    monkeypatch.setattr("seed_steps.cli._prompt_network", _fake_prompt_network)
+    inputs = iter(["", "d"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert calls["network"] == 1
+
+
+def test_cli_tamarit_network_override_skips_network_prompt(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tamarit",
+            "--network",
+            "testnet",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-color",
+            "--no-pause",
+        ],
+    )
+
+    def _boom_prompt_network() -> str:
+        raise AssertionError(
+            "_prompt_network no debe llamarse con --network en --tamarit"
+        )
+
+    monkeypatch.setattr("seed_steps.cli._prompt_network", _boom_prompt_network)
+    inputs = iter(["", "d"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "- network = testnet" in captured.out
+
+
+def test_cli_tamarit_path_override_skips_path_prompt(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tamarit",
+            "--path",
+            "m/84'/1'/0'/0/0",
+            "--network",
+            "testnet",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-color",
+            "--no-pause",
+        ],
+    )
+
+    def _boom_prompt_path(_network: str) -> str:
+        raise AssertionError("_prompt_hd_path no debe llamarse con --path en --tamarit")
+
+    monkeypatch.setattr("seed_steps.cli._prompt_hd_path", _boom_prompt_path)
+    inputs = iter([""])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "- path = m/84'/1'/0'/0/0" in captured.out
+
+
 def test_cli_wizard_no_pause_entropy_zero_shows_known_bip39_math_trace(
     capsys, monkeypatch
 ) -> None:

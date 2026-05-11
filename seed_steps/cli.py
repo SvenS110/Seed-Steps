@@ -306,6 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Inicia un asistente interactivo paso a paso.",
     )
     parser.add_argument(
+        "--tamarit",
+        action="store_true",
+        help="Modo meetup: wizard condensado con decisiones interactivas y menos pausas.",
+    )
+    parser.add_argument(
         "--no-pause",
         action="store_true",
         help="En wizard, desactiva pausas y confirmaciones entre pasos.",
@@ -1071,6 +1076,38 @@ def _run_bip39_guided_substeps(
         index += 1
 
     return "continue"
+
+
+def _run_bip39_condensed_block(
+    breakdown,
+    *,
+    source_label: str,
+    selected_entropy_bits: int | None,
+    pause_between_steps: bool,
+) -> str:
+    ent = len(breakdown.entropy_bits)
+    cs = len(breakdown.checksum_bits)
+    words = breakdown.mnemonic.split()
+    grouped_words = [" ".join(words[i : i + 4]) for i in range(0, len(words), 4)]
+
+    print(f"\n{ts.dim('━' * 72)}")
+    print(ts.bright_white("BIP39 condensado — ENT -> CS -> bloques -> palabras"))
+    print(f"- origen = {source_label}")
+    if selected_entropy_bits is not None:
+        print(f"- bits_entropia = {selected_entropy_bits}")
+    print(f"- ENT = {ent} bits")
+    print(f"- CS = ENT/32 = {cs} bits")
+    print(f"- checksum = {ts.pink(breakdown.checksum_bits)}")
+    print(f"- bloques_11 = {len(breakdown.bit_blocks)}")
+    print("- muestra de bloques:")
+    print("  " + " | ".join(breakdown.bit_blocks[:4]) + " | ...")
+    print("- mnemotecnica:")
+    for line in grouped_words:
+        print("  " + " ".join(ts.orange(word) for word in line.split()))
+
+    if not pause_between_steps:
+        return "continue"
+    return _prompt_continue_with_options()
 
 
 def _print_phase_seed_bip39(
@@ -1952,6 +1989,9 @@ def _run_interactive(
     no_pause: bool = False,
     default_passphrase: str = "",
     summary_raw: bool = False,
+    meetup_mode: bool = False,
+    network_override: str | None = None,
+    path_override: str | None = None,
 ) -> int:
     _print_header()
     print(f"Bienvenido a {ts.orange('Seed Steps')} by SvenS101")
@@ -1964,6 +2004,10 @@ def _run_interactive(
     print(
         "No uses material real; la politica segura por defecto sigue activa fuera del wizard."
     )
+    if meetup_mode:
+        print(
+            "Modo meetup activado: decisiones interactivas, explicacion condensada y menos pausas."
+        )
 
     state: dict[str, object] = {
         "entropy": None,
@@ -2013,12 +2057,20 @@ def _run_interactive(
                         )
                         return 4
 
-                b39_action = _run_bip39_guided_substeps(
-                    breakdown,
-                    source_label=source_label,
-                    selected_entropy_bits=selected_entropy_bits,
-                    pause_between_steps=not no_pause,
-                )
+                if meetup_mode:
+                    b39_action = _run_bip39_condensed_block(
+                        breakdown,
+                        source_label=source_label,
+                        selected_entropy_bits=selected_entropy_bits,
+                        pause_between_steps=not no_pause,
+                    )
+                else:
+                    b39_action = _run_bip39_guided_substeps(
+                        breakdown,
+                        source_label=source_label,
+                        selected_entropy_bits=selected_entropy_bits,
+                        pause_between_steps=not no_pause,
+                    )
                 if b39_action == "cancel":
                     print("Flujo cancelado por usuario. Salida limpia.")
                     return 0
@@ -2026,7 +2078,7 @@ def _run_interactive(
                     continue
             else:
                 _print_manual_mnemonic_limit_note()
-                b39_action = _prompt_continue_with_options()
+                b39_action = "continue" if no_pause else _prompt_continue_with_options()
                 if b39_action == "cancel":
                     print("Flujo cancelado por usuario. Salida limpia.")
                     return 0
@@ -2037,14 +2089,18 @@ def _run_interactive(
             continue
 
         elif stage_index == 1:
-            passphrase = default_passphrase if no_pause else _prompt_passphrase()
+            passphrase = (
+                default_passphrase
+                if (no_pause and not meetup_mode)
+                else _prompt_passphrase()
+            )
             state["passphrase"] = passphrase
             try:
                 seed_artifacts = _print_phase_seed_bip39(
                     mnemonic=str(state["mnemonic"]),
                     passphrase=passphrase,
                     show_secrets=True,
-                    interactive_micro_steps=not no_pause,
+                    interactive_micro_steps=(not no_pause) and (not meetup_mode),
                 )
             except UserCancelledFlow:
                 print("Flujo cancelado por usuario. Salida limpia.")
@@ -2070,20 +2126,28 @@ def _run_interactive(
             continue
 
         elif stage_index == 3:
-            network = "mainnet" if no_pause else _prompt_network()
+            if network_override is not None:
+                network = network_override
+            else:
+                network = (
+                    "mainnet" if (no_pause and not meetup_mode) else _prompt_network()
+                )
             state["network"] = network
-            path = (
-                _default_path_for_network(network)
-                if no_pause
-                else _prompt_hd_path(str(state["network"]))
-            )
+            if path_override is not None:
+                path = path_override
+            else:
+                path = (
+                    _default_path_for_network(network)
+                    if (no_pause and not meetup_mode)
+                    else _prompt_hd_path(str(state["network"]))
+                )
             state["path"] = path
             try:
                 path_artifacts = _print_phase_hd_path(
                     state["master"],
                     path,
                     show_secrets=True,
-                    interactive_micro_steps=not no_pause,
+                    interactive_micro_steps=(not no_pause) and (not meetup_mode),
                 )
             except UserCancelledFlow:
                 print("Flujo cancelado por usuario. Salida limpia.")
@@ -2099,7 +2163,7 @@ def _run_interactive(
                     state["derived"],
                     str(state["network"]),
                     show_secrets=True,
-                    interactive_micro_steps=not no_pause,
+                    interactive_micro_steps=(not no_pause) and (not meetup_mode),
                 )
             except UserCancelledFlow:
                 print("Flujo cancelado por usuario. Salida limpia.")
@@ -2540,8 +2604,15 @@ def run() -> int:
         )
         return 3
 
-    if args.interactive:
+    if args.interactive or args.tamarit:
         preset_entropy = None
+        argv_tokens = sys.argv[1:]
+        network_override = (
+            args.network if (args.tamarit and "--network" in argv_tokens) else None
+        )
+        path_override = (
+            args.path if (args.tamarit and "--path" in argv_tokens) else None
+        )
         if args.entropy:
             try:
                 preset_entropy = parse_entropy_hex(args.entropy)
@@ -2561,6 +2632,9 @@ def run() -> int:
             no_pause=args.no_pause,
             default_passphrase=args.passphrase,
             summary_raw=args.summary_raw,
+            meetup_mode=args.tamarit,
+            network_override=network_override,
+            path_override=path_override,
         )
 
     show_secrets = args.show_secrets and not args.no_secrets
