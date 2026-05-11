@@ -204,7 +204,7 @@ seed-steps --mnemonic "abandon abandon abandon abandon abandon abandon abandon a
 
 ## Modo meetup
 
-`--tamarit` activa una variante del wizard con decisiones interactivas obligatorias y presentacion mas condensada (menos pausas entre subpasos).
+`--tamarit` activa un modo meetup/pedagógico condensado para demos en vivo: mantiene decisiones interactivas (origen, bits, passphrase, red y ruta), organiza la narrativa por fases A-F y evita micro-subpasos.
 
 ```bash
 seed-steps --tamarit
@@ -235,9 +235,9 @@ abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon 
 | `--tui`                     | switch | Vista educativa por paneles (read-only).             |
 | `--interactive`, `--wizard` | switch | Inicia asistente interactivo.                        |
 | `--tamarit`                 | switch | Modo meetup: wizard condensado e interactivo.        |
-| `--no-pause`                | switch | En wizard, desactiva pausas entre pasos.             |
+| `--no-pause`                | switch | En wizard/tamarit, desactiva pausas entre fases.     |
 | `--no-color`                | switch | Desactiva ANSI en toda la salida.                    |
-| `--mnemonic`                | `str`  | Mnemotecnica explicita de entrada.                   |
+| `--mnemonic`                | `str`  | Mnemotécnica explícita de entrada.                   |
 | `--passphrase`              | `str`  | Passphrase BIP39 opcional.                           |
 | `--derive-seed`             | switch | Deriva seed BIP39.                                   |
 | `--derive-bip32`            | switch | Deriva master key BIP32.                             |

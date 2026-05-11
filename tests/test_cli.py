@@ -372,9 +372,20 @@ def test_cli_interactive_guided_manual_mnemonic_explains_bip39_limit(
 def test_cli_parser_accepts_tamarit_and_shows_meetup_header(
     capsys, monkeypatch
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["seed-steps", "--tamarit"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tamarit",
+            "--no-pause",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-color",
+        ],
+    )
 
-    inputs = iter(["a", "128", "n", "c"])
+    inputs = iter(["", "mainnet", "d"])
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
 
     exit_code = run()
@@ -382,7 +393,8 @@ def test_cli_parser_accepts_tamarit_and_shows_meetup_header(
 
     assert exit_code == 0
     assert captured.err == ""
-    assert "Modo meetup activado" in captured.out
+    assert "Seed Steps — Modo meetup" in captured.out
+    assert "Fase A) BIP39 condensado" in captured.out
 
 
 def test_cli_wizard_without_tamarit_keeps_previous_intro(capsys, monkeypatch) -> None:
@@ -397,6 +409,7 @@ def test_cli_wizard_without_tamarit_keeps_previous_intro(capsys, monkeypatch) ->
     assert exit_code == 0
     assert captured.err == ""
     assert "Modo meetup activado" not in captured.out
+    assert "Subpaso BIP39 1/5" in captured.out
 
 
 def test_cli_tamarit_keeps_network_and_manual_path_decisions(
@@ -453,6 +466,83 @@ def test_cli_tamarit_no_pause_has_zero_pause_prompts(capsys, monkeypatch) -> Non
     assert "Listo este paso. Continuamos al siguiente?" not in captured.out
     assert "Subpaso BIP39 1/5" not in captured.out
     assert "BIP39 condensado" in captured.out
+    assert "Pulsa Enter para ver la fase" not in captured.out
+
+
+def test_cli_tamarit_shows_phase_narrative_and_hides_removed_micro_substeps(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tamarit",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-color",
+            "--no-pause",
+        ],
+    )
+
+    inputs = iter(["", "mainnet", "d"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Fase A) BIP39 condensado" in captured.out
+    assert "Fase B) Seed BIP39" in captured.out
+    assert "Fase C) Master BIP32" in captured.out
+    assert "Fase D) Ruta HD" in captured.out
+    assert "Fase E) Direccion" in captured.out
+    assert "Fase F) Resumen final" in captured.out
+    assert "Las palabras no se usan directamente como clave" in captured.out
+    assert "BIP39 termina en la seed" in captured.out
+    assert "Una dirección no es una clave privada" in captured.out
+    assert "Payload xprv" not in captured.out
+    assert "Payload xpub" not in captured.out
+    assert "SHA256(pubkey)" in captured.out
+    assert "HASH160 = RIPEMD160(SHA256(pubkey))" in captured.out
+    assert "direccion = " in captured.out
+    assert "U_1" in captured.out
+    assert "U_2" in captured.out
+    assert "U_3" in captured.out
+    assert "U_2046" in captured.out
+    assert "U_2047" in captured.out
+    assert "U_2048" in captured.out
+
+
+def test_cli_tamarit_phase_pauses_are_oriented_by_phase(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["seed-steps", "--tamarit", "--no-color"])
+
+    phase_calls: list[str] = []
+
+    def _fake_pause_for_meetup_phase(*, phase_label: str, no_pause: bool) -> None:
+        phase_calls.append(f"{phase_label}|{no_pause}")
+
+    monkeypatch.setattr(
+        "seed_steps.cli._pause_for_meetup_phase", _fake_pause_for_meetup_phase
+    )
+
+    inputs = iter(["a", "128", "n", "mainnet", "d"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert phase_calls == [
+        "ver la fase A: BIP39 de entropía a palabras|False",
+        "ver la fase B: palabras a seed|False",
+        "entrar en la fase C: seed a nodo maestro BIP32|False",
+        "recorrer la fase D: ruta HD|False",
+        "ver la fase E: clave pública a dirección|False",
+        "ver la fase F: resumen final|False",
+    ]
 
 
 def test_cli_tamarit_without_network_still_prompts_network(capsys, monkeypatch) -> None:
