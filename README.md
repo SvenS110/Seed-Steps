@@ -132,9 +132,11 @@ seed-steps --wizard
 
 ```
 
-#### Windows PowerShell
+> En Windows usamos `py -3.11` de forma explícita para evitar que el Python Launcher seleccione una versión antigua o el alias de Microsoft Store. Si `py -3.11 --version` falla, instala Python 3.11 o superior desde python.org y vuelve a ejecutar el comando.
+>
+> Diagnóstico opcional: `py -0p` lista las versiones detectadas por Python Launcher.
 
-En Windows usamos `py -3.11` de forma explicita para evitar que el Python Launcher seleccione una version antigua o el alias de Microsoft Store. Si `py -3.11 --version` falla, instala Python 3.11 o superior desde python.org y vuelve a ejecutar el comando. Como diagnostico opcional, `py -0p` lista las versiones detectadas por Python Launcher.
+#### Windows PowerShell
 
 ```powershell
 py -3.11 --version
@@ -164,8 +166,6 @@ Después repite:
 ```
 
 #### Windows CMD
-
-En Windows usamos `py -3.11` de forma explicita para evitar que el Python Launcher seleccione una version antigua o el alias de Microsoft Store. Si `py -3.11 --version` falla, instala Python 3.11 o superior desde python.org y vuelve a ejecutar el comando. Como diagnostico opcional, `py -0p` lista las versiones detectadas por Python Launcher.
 
 ```bat
 py -3.11 --version
