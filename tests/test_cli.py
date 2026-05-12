@@ -3,6 +3,7 @@ import re
 import os
 from pathlib import Path
 
+import seed_steps.cli as cli
 from seed_steps.cli import run
 
 
@@ -63,6 +64,44 @@ def test_cli_detailed_output_by_default(capsys, monkeypatch) -> None:
 
     assert exit_code == 0
     _assert_matches_golden(captured, "detailed_default.txt")
+
+
+def test_colorize_checksum_by_global_position_inserts_ansi_after_entropy(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
+    cli.ts.set_enabled(True)
+
+    rendered = cli._colorize_checksum_by_global_position(
+        "00000000 0011",
+        bit_offset=124,
+        entropy_bits_len=128,
+    )
+
+    assert cli.COLOR_CHECKSUM != cli.COLOR_SEED
+    assert "0000" in rendered
+    assert cli.COLOR_CHECKSUM in rendered
+    assert f"{cli.COLOR_CHECKSUM}0{cli.COLOR_RESET}" in rendered
+    assert (
+        f"{cli.COLOR_CHECKSUM}1{cli.COLOR_RESET}{cli.COLOR_CHECKSUM}1{cli.COLOR_RESET}"
+        in rendered
+    )
+
+
+def test_colorize_checksum_by_global_position_without_color_returns_plain_text() -> (
+    None
+):
+    cli.ts.set_enabled(False)
+
+    rendered = cli._colorize_checksum_by_global_position(
+        "00000000 0011",
+        bit_offset=124,
+        entropy_bits_len=128,
+    )
+
+    assert rendered == "00000000 0011"
+    assert cli.COLOR_CHECKSUM not in rendered
+    cli.ts.set_enabled(True)
 
 
 def test_cli_compact_output_hides_detailed_table(capsys, monkeypatch) -> None:
@@ -497,9 +536,12 @@ def test_cli_tamariz_shows_phase_narrative_and_hides_removed_micro_substeps(
     assert captured.err == ""
     assert "BIP39 1/5 — Entropía" in captured.out
     assert "BIP39 3/5 — Entropía + checksum" in captured.out
+    assert "BIP39 4/5 — Bloques de 11 bits" in captured.out
     assert "checksum_bits" in captured.out
-    assert "[01]" in captured.out
+    assert "entropy_plus_checksum" in captured.out
+    assert "bloque[01]" in captured.out
     assert "BIP39 5/5 — Índices y palabras" in captured.out
+    assert "pos | bloque(11-bit) | indice | palabra" in captured.out
     assert "Cada bloque de 11 bits se lee en big-endian" in captured.out
     assert "BIP39 1/6 — Mnemotécnica de entrada" in captured.out
     assert "BIP39 5/6 — PBKDF2-HMAC-SHA512" in captured.out
@@ -531,12 +573,12 @@ def test_cli_tamariz_shows_phase_narrative_and_hides_removed_micro_substeps(
     assert "SHA256(pubkey)" in captured.out
     assert "HASH160 = RIPEMD160(SHA256(pubkey))" in captured.out
     assert "direccion = " in captured.out
-    assert "U_1" in captured.out
-    assert "U_2" in captured.out
-    assert "U_3" in captured.out
-    assert "U_2046" in captured.out
-    assert "U_2047" in captured.out
-    assert "U_2048" in captured.out
+    assert "iteracion 0001 -> U_1:" in captured.out
+    assert "iteracion 0002 -> U_2:" in captured.out
+    assert "iteracion 0003 -> U_3:" in captured.out
+    assert "iteracion 2046 -> U_2046" in captured.out
+    assert "iteracion 2047 -> U_2047" in captured.out
+    assert "iteracion 2048 -> U_2048:" in captured.out
 
 
 def test_cli_tamariz_phase_pauses_are_oriented_by_phase(capsys, monkeypatch) -> None:

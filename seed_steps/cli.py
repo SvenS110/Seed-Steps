@@ -87,7 +87,7 @@ def _print_secrets_warning() -> None:
 
 COLOR_RESET = "\033[0m"
 COLOR_ENTROPY = "\033[96m"
-COLOR_CHECKSUM = "\033[93m"
+COLOR_CHECKSUM = "\033[95m"
 COLOR_WORD = "\033[38;5;208m"
 COLOR_PASSPHRASE = "\033[95m"
 COLOR_SEED = "\033[93m"
@@ -159,9 +159,9 @@ def _color_segmented_bits(bits: str, *, bit_offset: int, entropy_bits_len: int) 
     for idx, bit in enumerate(bits):
         absolute = bit_offset + idx
         if absolute < entropy_bits_len:
-            rendered.append(ts.cyan(bit))
+            rendered.append(_colorize(bit, COLOR_ENTROPY))
         else:
-            rendered.append(ts.pink(bit))
+            rendered.append(_colorize(bit, COLOR_CHECKSUM))
     return "".join(rendered)
 
 
@@ -285,6 +285,38 @@ def _colorized_11_bit_block(block: str, start_bit: int, entropy_bits_len: int) -
         f"{_colorize(entropy_part, COLOR_ENTROPY)}"
         f"{_colorize(checksum_part, COLOR_CHECKSUM)}"
     )
+
+
+def _colorize_checksum_suffix(bits: str, checksum_suffix_len: int) -> str:
+    if checksum_suffix_len <= 0:
+        return bits
+    if checksum_suffix_len >= len(bits):
+        return _colorize(bits, COLOR_CHECKSUM)
+    prefix = bits[:-checksum_suffix_len]
+    suffix = bits[-checksum_suffix_len:]
+    return f"{prefix}{_colorize(suffix, COLOR_CHECKSUM)}"
+
+
+def _colorize_checksum_by_global_position(
+    text: str,
+    *,
+    bit_offset: int,
+    entropy_bits_len: int,
+    checksum_color: str = COLOR_CHECKSUM,
+) -> str:
+    rendered: list[str] = []
+    bit_index = 0
+    for char in text:
+        if char in {"0", "1"}:
+            absolute = bit_offset + bit_index
+            if absolute >= entropy_bits_len:
+                rendered.append(_colorize(char, checksum_color))
+            else:
+                rendered.append(char)
+            bit_index += 1
+        else:
+            rendered.append(char)
+    return "".join(rendered)
 
 
 def _prompt_micro_operation(
@@ -448,19 +480,18 @@ def _print_stage_checksum(breakdown) -> None:
 
 def _print_stage_combined_bits(breakdown, *, use_color: bool = False) -> None:
     color_cyan = "\033[96m"
-    color_yellow = "\033[93m"
     color_reset = "\033[0m"
     colored_bits = breakdown.entropy_plus_checksum_bits
     if use_color:
         colored_bits = (
             f"{color_cyan}{breakdown.entropy_bits}{color_reset}"
-            f"{color_yellow}{breakdown.checksum_bits}{color_reset}"
+            f"{COLOR_CHECKSUM}{breakdown.checksum_bits}{color_reset}"
         )
 
     print("3. Bits combinados")
     print("   Por que: BIP39 une entropia y checksum antes de partir en bloques de 11.")
     if use_color:
-        print("   Leyenda color:       ENTROPIA=cian | CHECKSUM=amarillo")
+        print("   Leyenda color:       ENTROPIA=cian | CHECKSUM=magenta claro")
     print(f"   Entropia+checksum:   {colored_bits}")
     print(f"   Total de bits:       {len(breakdown.entropy_plus_checksum_bits)} bits")
 
@@ -488,7 +519,7 @@ def _print_stage_mnemonic(breakdown) -> None:
 def _print_stage_indices_colored(breakdown) -> None:
     print("4. Indices")
     print("   Por que: Cada bloque de 11 bits apunta a una palabra en la lista BIP39.")
-    print("   Leyenda color:       ENTROPIA=cian | CHECKSUM=amarillo")
+    print("   Leyenda color:       ENTROPIA=cian | CHECKSUM=magenta claro")
     colored_blocks: list[str] = []
     for index, block in enumerate(breakdown.bit_blocks):
         colored_blocks.append(
@@ -918,6 +949,13 @@ def _print_meetup_text_block(lines: list[str]) -> None:
         print(line)
 
 
+def _print_meetup_intro_without_title(lines: list[str], title: str) -> None:
+    intro_lines = lines
+    if lines and lines[0].strip() == title.strip():
+        intro_lines = lines[1:]
+    _print_meetup_text_block(intro_lines)
+
+
 def _print_meetup_phase_title(title: str) -> None:
     print()
     print(ts.bright_white(title))
@@ -1130,22 +1168,23 @@ def _run_bip39_condensed_block(
     selected_entropy_bits: int | None,
     pause_between_steps: bool,
 ) -> str:
-    _print_meetup_text_block(PHASE_A_INTRO)
+    phase_title = "Fase A — BIP39: de entropía a palabras"
+    _print_meetup_intro_without_title(PHASE_A_INTRO, phase_title)
     ent = len(breakdown.entropy_bits)
     cs = len(breakdown.checksum_bits)
     words = breakdown.mnemonic.split()
     grouped_words = [" ".join(words[i : i + 4]) for i in range(0, len(words), 4)]
 
-    _print_meetup_phase_title("Fase A — BIP39: de entropía a palabras")
+    _print_meetup_phase_title(phase_title)
 
     print(ts.bright_white("BIP39 1/5 — Entropía"))
     print("- Idea: identificar la fuente y la longitud de entropía.")
     print("- Datos:")
-    print(f"- origen = {source_label}")
+    print(f"  - origen = {source_label}")
     if selected_entropy_bits is not None:
-        print(f"- bits_entropia = {selected_entropy_bits}")
-    print(f"- entropy_hex = {breakdown.entropy_hex}")
-    print(f"- ENT = {ent} bits")
+        print(f"  - bits_entropia = {selected_entropy_bits}")
+    print(f"  - entropy_hex = {breakdown.entropy_hex}")
+    print(f"  - ENT = {ent} bits")
     print("- entropy_bits:")
     print(
         "  "
@@ -1155,57 +1194,87 @@ def _run_bip39_condensed_block(
     )
     print("- Resultado: entropía lista para checksum.")
 
+    print()
+
     print(ts.bright_white("BIP39 2/5 — Checksum"))
     print("- Idea: agregar bits de control para detectar errores.")
     print("- Datos:")
-    print(f"- SHA256(entropy) = {breakdown.sha256_hex}")
+    print(f"  - SHA256(entropy) = {breakdown.sha256_hex}")
     print("- Cálculo: CS = ENT/32")
     print(f"- CS = ENT/32 = {cs} bits")
-    print(f"- checksum = {ts.pink(breakdown.checksum_bits)}")
+    print(f"- checksum = {_colorize(breakdown.checksum_bits, COLOR_CHECKSUM)}")
     print("- Resultado: checksum anexable a la entropía.")
+
+    print()
 
     print(ts.bright_white("BIP39 3/5 — Entropía + checksum"))
     print("- Idea: crear el flujo binario total que define las palabras.")
     print("- Datos:")
-    print("- entropy_bits:")
+    print("  - entropy_bits:")
     print(
         "  "
         + format_bits_by_byte(breakdown.entropy_bits, bytes_per_line=4).replace(
             "\n", "\n  "
         )
     )
-    print(f"- checksum_bits = {breakdown.checksum_bits}")
+    print(f"  - checksum_bits = {_colorize(breakdown.checksum_bits, COLOR_CHECKSUM)}")
     print("- Cálculo: entropy_plus_checksum = entropy_bits || checksum_bits")
     print(f"- total_bits = ENT + CS = {ent + cs}")
-    print("- entropy_plus_checksum:")
-    print(
-        "  "
-        + _format_segmented_bits_multiline(
-            breakdown.entropy_plus_checksum_bits,
-            entropy_bits_len=len(breakdown.entropy_bits),
-            bytes_per_line=4,
-        ).replace("\n", "\n  ")
-    )
+    print("- entropy_plus_checksum (agrupado por bytes):")
+    full_bits = breakdown.entropy_plus_checksum_bits
+    grouped_lines = format_bits_by_byte(full_bits, bytes_per_line=4).splitlines()
+    rendered_lines: list[str] = []
+    for line_index, line in enumerate(grouped_lines):
+        line_start = line_index * 32
+        rendered_lines.append(
+            _colorize_checksum_by_global_position(
+                line,
+                bit_offset=line_start,
+                entropy_bits_len=len(breakdown.entropy_bits),
+                checksum_color=COLOR_CHECKSUM,
+            )
+        )
+    print("  " + "\n  ".join(rendered_lines))
     print("- Resultado: cadena lista para dividir en bloques de 11 bits.")
+
+    print()
 
     print(ts.bright_white("BIP39 4/5 — Bloques de 11 bits"))
     print("- Idea: cada bloque de 11 bits representa un índice BIP39.")
     print("- Explicación: 2048 = 2^11, por eso 11 bits cubren toda la wordlist.")
     print("- Datos:")
     print(f"- bloques_11 = {len(breakdown.bit_blocks)}")
-    print("- bloques_11bit:")
+    print()
+    print("Desarrollo")
     for pos, block in enumerate(breakdown.bit_blocks, start=1):
-        print(f"  [{pos:02d}] {block}")
+        start_bit = (pos - 1) * 11
+        colored_block = _colorize_checksum_by_global_position(
+            block,
+            bit_offset=start_bit,
+            entropy_bits_len=len(breakdown.entropy_bits),
+            checksum_color=COLOR_CHECKSUM,
+        )
+        print(f"- bloque[{pos:02d}] = {colored_block}")
     print("- Resultado: índices listos para mapear a palabras.")
+
+    print()
 
     print(ts.bright_white("BIP39 5/5 — Índices y palabras"))
     print("- Idea: traducir índices a palabras humanas.")
     print("- Explicación: checksum detecta errores, NO corrige automáticamente.")
-    print("- tabla bloque -> indice -> palabra:")
-    print("  bloque | indice | palabra")
-    print("  -------+--------+---------")
-    for step in breakdown.steps:
-        print(f"  {step.bit_block} | {step.index:4d} | {ts.orange(step.word)}")
+    print()
+    print("Desarrollo")
+    print("pos | bloque(11-bit) | indice | palabra")
+    print("----+----------------+--------+----------")
+    for pos, step in enumerate(breakdown.steps, start=1):
+        start_bit = (pos - 1) * 11
+        colored_block = _colorize_checksum_by_global_position(
+            step.bit_block,
+            bit_offset=start_bit,
+            entropy_bits_len=len(breakdown.entropy_bits),
+            checksum_color=COLOR_CHECKSUM,
+        )
+        print(f"{pos:>3} | {colored_block} | {step.index:>6} | {ts.orange(step.word)}")
     for note in PHASE_A_ENDIAN_NOTES:
         print(f"- {note}")
     print("- mnemotécnica:")
@@ -1248,7 +1317,9 @@ def _print_phase_seed_bip39(
     seed_display = _display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)
 
     if meetup_mode:
-        _print_meetup_text_block(PHASE_B_INTRO)
+        _print_meetup_intro_without_title(
+            PHASE_B_INTRO, "Fase B — BIP39: de palabras a seed"
+        )
         _print_meetup_text_block(PHASE_B_PBKDF2)
         print()
         print(ts.bright_white(PHASE_B_STEPS["1_6"]))
@@ -1279,38 +1350,23 @@ def _print_phase_seed_bip39(
         print("- Idea: endurecer derivación con 2048 iteraciones.")
         print("- Datos: PBKDF2-HMAC-SHA512, iterations=2048, dklen=64")
         print("- Cálculo: U_1, U_2, U_3, ..., U_2046, U_2047, U_2048; T_1 = XOR(U_i)")
-        print("- U-sequence visible:")
-        print("  " + ts.bright_white("U_1, U_2, U_3, ..., U_2046, U_2047, U_2048"))
-        print(
-            _as_multiline_block(
-                "  U_1", format_long_hex(u_values[0].hex(), groups_per_line=2)
-            )
-        )
-        print(
-            _as_multiline_block(
-                "  U_2", format_long_hex(u_values[1].hex(), groups_per_line=2)
-            )
-        )
-        print(
-            _as_multiline_block(
-                "  U_3", format_long_hex(u_values[2].hex(), groups_per_line=2)
-            )
-        )
-        print(
-            _as_multiline_block(
-                "  U_2046", format_long_hex(u_values[2045].hex(), groups_per_line=2)
-            )
-        )
-        print(
-            _as_multiline_block(
-                "  U_2047", format_long_hex(u_values[2046].hex(), groups_per_line=2)
-            )
-        )
-        print(
-            _as_multiline_block(
-                "  U_2048", format_long_hex(u_values[2047].hex(), groups_per_line=2)
-            )
-        )
+        print()
+        print("Desarrollo")
+        print(ts.bright_white("- iteracion 0001 -> U_1:"))
+        print(format_long_hex(u_values[0].hex(), groups_per_line=2))
+        print(ts.bright_white("- iteracion 0002 -> U_2:"))
+        print(format_long_hex(u_values[1].hex(), groups_per_line=2))
+        print(ts.bright_white("- iteracion 0003 -> U_3:"))
+        print(format_long_hex(u_values[2].hex(), groups_per_line=2))
+        print(ts.bright_white("- ..."))
+        print(ts.bright_white("- 2042 iteraciones intermedias omitidas"))
+        print(ts.bright_white("- ..."))
+        print(ts.bright_white("- iteracion 2046 -> U_2046:"))
+        print(format_long_hex(u_values[2045].hex(), groups_per_line=2))
+        print(ts.bright_white("- iteracion 2047 -> U_2047:"))
+        print(format_long_hex(u_values[2046].hex(), groups_per_line=2))
+        print(ts.bright_white("- iteracion 2048 -> U_2048:"))
+        print(format_long_hex(u_values[2047].hex(), groups_per_line=2))
         print(f"- {ts.formula('T_1 = U_1 XOR U_2 XOR ... XOR U_2048')}")
         print("- Resultado: bloque T_1 consolidado.")
         print()
@@ -1561,7 +1617,9 @@ def _print_phase_master_bip32(
     )
 
     if meetup_mode:
-        _print_meetup_text_block(PHASE_C_INTRO)
+        _print_meetup_intro_without_title(
+            PHASE_C_INTRO, "Fase C — BIP32: de seed a nodo maestro"
+        )
         _print_meetup_text_block(PHASE_C_IL_IR)
         print()
         print(ts.bright_white(PHASE_C_STEPS["1_4"]))
@@ -1775,7 +1833,7 @@ def _print_phase_hd_path(
         )
 
     if meetup_mode:
-        _print_meetup_text_block(PHASE_D_INTRO)
+        _print_meetup_intro_without_title(PHASE_D_INTRO, "Fase D — Ruta HD")
         _print_meetup_text_block(PHASE_D_HARDENED)
         print()
         print(ts.bright_white(PHASE_D_STEPS["1_3"]))
@@ -1952,7 +2010,9 @@ def _print_phase_address(
     )
     witness_line = f"OP_{p2wpkh.witness_version} {p2wpkh.witness_program.hex()}"
     if meetup_mode:
-        _print_meetup_text_block(PHASE_E_INTRO)
+        _print_meetup_intro_without_title(
+            PHASE_E_INTRO, "Fase E — De clave pública a dirección"
+        )
         _print_meetup_text_block(PHASE_E_HASH160)
         print()
         print(ts.bright_white(PHASE_E_STEPS["1_4"]))
