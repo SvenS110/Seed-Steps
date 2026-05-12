@@ -369,7 +369,7 @@ def test_cli_interactive_guided_manual_mnemonic_explains_bip39_limit(
     assert "Fase B) Seed BIP39" in captured.out
 
 
-def test_cli_parser_accepts_tamarit_and_shows_meetup_header(
+def test_cli_parser_accepts_tamariz_and_shows_meetup_header(
     capsys, monkeypatch
 ) -> None:
     monkeypatch.setattr(
@@ -377,7 +377,7 @@ def test_cli_parser_accepts_tamarit_and_shows_meetup_header(
         "argv",
         [
             "seed-steps",
-            "--tamarit",
+            "--tamariz",
             "--no-pause",
             "--entropy",
             "00000000000000000000000000000000",
@@ -394,10 +394,11 @@ def test_cli_parser_accepts_tamarit_and_shows_meetup_header(
     assert exit_code == 0
     assert captured.err == ""
     assert "Seed Steps — Modo meetup" in captured.out
-    assert "Fase A) BIP39 condensado" in captured.out
+    assert "BIP39 1/5 — Entropía" in captured.out
+    assert "BIP39 5/5 — Índices y palabras" in captured.out
 
 
-def test_cli_wizard_without_tamarit_keeps_previous_intro(capsys, monkeypatch) -> None:
+def test_cli_wizard_without_tamariz_keeps_previous_intro(capsys, monkeypatch) -> None:
     monkeypatch.setattr(sys, "argv", ["seed-steps", "--wizard"])
 
     inputs = iter(["a", "128", "n", "c"])
@@ -412,7 +413,7 @@ def test_cli_wizard_without_tamarit_keeps_previous_intro(capsys, monkeypatch) ->
     assert "Subpaso BIP39 1/5" in captured.out
 
 
-def test_cli_tamarit_keeps_network_and_manual_path_decisions(
+def test_cli_tamariz_keeps_network_and_manual_path_decisions(
     capsys, monkeypatch
 ) -> None:
     monkeypatch.setattr(
@@ -420,7 +421,7 @@ def test_cli_tamarit_keeps_network_and_manual_path_decisions(
         "argv",
         [
             "seed-steps",
-            "--tamarit",
+            "--tamariz",
             "--no-pause",
             "--entropy",
             "00000000000000000000000000000000",
@@ -441,13 +442,13 @@ def test_cli_tamarit_keeps_network_and_manual_path_decisions(
     assert "direccion final = tb1" in captured.out
 
 
-def test_cli_tamarit_no_pause_has_zero_pause_prompts(capsys, monkeypatch) -> None:
+def test_cli_tamariz_no_pause_has_zero_pause_prompts(capsys, monkeypatch) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
         [
             "seed-steps",
-            "--tamarit",
+            "--tamariz",
             "--no-pause",
             "--entropy",
             "00000000000000000000000000000000",
@@ -464,12 +465,13 @@ def test_cli_tamarit_no_pause_has_zero_pause_prompts(capsys, monkeypatch) -> Non
     assert exit_code == 0
     assert captured.err == ""
     assert "Listo este paso. Continuamos al siguiente?" not in captured.out
+    assert "Presiona Enter para continuar..." not in captured.out
     assert "Subpaso BIP39 1/5" not in captured.out
-    assert "BIP39 condensado" in captured.out
+    assert "BIP39 1/5 — Entropía" in captured.out
     assert "Pulsa Enter para ver la fase" not in captured.out
 
 
-def test_cli_tamarit_shows_phase_narrative_and_hides_removed_micro_substeps(
+def test_cli_tamariz_shows_phase_narrative_and_hides_removed_micro_substeps(
     capsys, monkeypatch
 ) -> None:
     monkeypatch.setattr(
@@ -477,7 +479,7 @@ def test_cli_tamarit_shows_phase_narrative_and_hides_removed_micro_substeps(
         "argv",
         [
             "seed-steps",
-            "--tamarit",
+            "--tamariz",
             "--entropy",
             "00000000000000000000000000000000",
             "--no-color",
@@ -493,12 +495,29 @@ def test_cli_tamarit_shows_phase_narrative_and_hides_removed_micro_substeps(
 
     assert exit_code == 0
     assert captured.err == ""
-    assert "Fase A) BIP39 condensado" in captured.out
+    assert "BIP39 1/5 — Entropía" in captured.out
+    assert "BIP39 5/5 — Índices y palabras" in captured.out
+    assert "Cada bloque de 11 bits se lee en big-endian" in captured.out
+    assert "BIP39 1/6 — Mnemotécnica de entrada" in captured.out
+    assert "BIP39 5/6 — PBKDF2-HMAC-SHA512" in captured.out
+    assert "BIP39 6/6 — Seed final" in captured.out
+    assert "BIP32 1/4 — Seed de entrada" in captured.out
+    assert "BIP32 3/4 — Separar IL/IR" in captured.out
+    assert "BIP32 4/4 — xprv/xpub master" in captured.out
+    assert "Ruta HD 1/3 — Ruta elegida" in captured.out
+    assert "Ruta HD 2/3 — Niveles y significado" in captured.out
+    assert "Ruta HD 3/3 — Derivación y nodo final" in captured.out
+    assert "index=1 se escribe como 00 00 00 01" in captured.out
+    assert "Dirección 1/4 — Pubkey comprimida" in captured.out
+    assert "Dirección 2/4 — HASH160 (incluye SHA256)" in captured.out
+    assert "Dirección 3/4 — Witness + Bech32" in captured.out
+    assert "Dirección 4/4 — Dirección final" in captured.out
     assert "Fase B) Seed BIP39" in captured.out
     assert "Fase C) Master BIP32" in captured.out
     assert "Fase D) Ruta HD" in captured.out
     assert "Fase E) Direccion" in captured.out
     assert "Fase F) Resumen final" in captured.out
+    assert "En transacciones Bitcoin aparece mucho little-endian" in captured.out
     assert "Las palabras no se usan directamente como clave" in captured.out
     assert "BIP39 termina en la seed" in captured.out
     assert "Una dirección no es una clave privada" in captured.out
@@ -515,8 +534,8 @@ def test_cli_tamarit_shows_phase_narrative_and_hides_removed_micro_substeps(
     assert "U_2048" in captured.out
 
 
-def test_cli_tamarit_phase_pauses_are_oriented_by_phase(capsys, monkeypatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["seed-steps", "--tamarit", "--no-color"])
+def test_cli_tamariz_phase_pauses_are_oriented_by_phase(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["seed-steps", "--tamariz", "--no-color"])
 
     phase_calls: list[str] = []
 
@@ -545,13 +564,13 @@ def test_cli_tamarit_phase_pauses_are_oriented_by_phase(capsys, monkeypatch) -> 
     ]
 
 
-def test_cli_tamarit_without_network_still_prompts_network(capsys, monkeypatch) -> None:
+def test_cli_tamariz_without_network_still_prompts_network(capsys, monkeypatch) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
         [
             "seed-steps",
-            "--tamarit",
+            "--tamariz",
             "--entropy",
             "00000000000000000000000000000000",
             "--no-color",
@@ -577,13 +596,13 @@ def test_cli_tamarit_without_network_still_prompts_network(capsys, monkeypatch) 
     assert calls["network"] == 1
 
 
-def test_cli_tamarit_network_override_skips_network_prompt(capsys, monkeypatch) -> None:
+def test_cli_tamariz_network_override_skips_network_prompt(capsys, monkeypatch) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
         [
             "seed-steps",
-            "--tamarit",
+            "--tamariz",
             "--network",
             "testnet",
             "--entropy",
@@ -595,7 +614,7 @@ def test_cli_tamarit_network_override_skips_network_prompt(capsys, monkeypatch) 
 
     def _boom_prompt_network() -> str:
         raise AssertionError(
-            "_prompt_network no debe llamarse con --network en --tamarit"
+            "_prompt_network no debe llamarse con --network en --tamariz"
         )
 
     monkeypatch.setattr("seed_steps.cli._prompt_network", _boom_prompt_network)
@@ -610,13 +629,13 @@ def test_cli_tamarit_network_override_skips_network_prompt(capsys, monkeypatch) 
     assert "- network = testnet" in captured.out
 
 
-def test_cli_tamarit_path_override_skips_path_prompt(capsys, monkeypatch) -> None:
+def test_cli_tamariz_path_override_skips_path_prompt(capsys, monkeypatch) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
         [
             "seed-steps",
-            "--tamarit",
+            "--tamariz",
             "--path",
             "m/84'/1'/0'/0/0",
             "--network",
@@ -629,7 +648,7 @@ def test_cli_tamarit_path_override_skips_path_prompt(capsys, monkeypatch) -> Non
     )
 
     def _boom_prompt_path(_network: str) -> str:
-        raise AssertionError("_prompt_hd_path no debe llamarse con --path en --tamarit")
+        raise AssertionError("_prompt_hd_path no debe llamarse con --path en --tamariz")
 
     monkeypatch.setattr("seed_steps.cli._prompt_hd_path", _boom_prompt_path)
     inputs = iter([""])

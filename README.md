@@ -193,7 +193,7 @@ seed-steps --compact
 seed-steps --wizard
 
 # 4) Modo meetup (condensado e interactivo)
-seed-steps --tamarit
+seed-steps --tamariz
 
 # 5) Pipeline completo: BIP39 -> seed -> BIP32 -> direccion
 seed-steps --full-journey --path "m/84'/0'/0'/0/0" --network mainnet
@@ -204,12 +204,12 @@ seed-steps --mnemonic "abandon abandon abandon abandon abandon abandon abandon a
 
 ## Modo meetup
 
-`--tamarit` activa un modo meetup/pedagógico condensado para demos en vivo: mantiene decisiones interactivas (origen, bits, passphrase, red y ruta), organiza la narrativa por fases A-F y evita micro-subpasos.
+`--tamariz` activa una versión editorializada del wizard para demos en vivo: mantiene decisiones interactivas (origen, bits, passphrase, red y ruta), organiza la narrativa por fases A-F con contenido real por paso (Idea/Datos/Cálculo/Resultado) y reduce burocracia sin convertir todo en un resumen ultra-compacto.
 
 ```bash
-seed-steps --tamarit
-seed-steps --tamarit --no-color
-seed-steps --tamarit --no-pause
+seed-steps --tamariz
+seed-steps --tamariz --no-color
+seed-steps --tamariz --no-pause
 ```
 
 ## Ejemplo deterministico (entropia cero)
@@ -234,8 +234,8 @@ abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon 
 | `--compact`                 | switch | Salida compacta del flujo BIP39.                     |
 | `--tui`                     | switch | Vista educativa por paneles (read-only).             |
 | `--interactive`, `--wizard` | switch | Inicia asistente interactivo.                        |
-| `--tamarit`                 | switch | Modo meetup: wizard condensado e interactivo.        |
-| `--no-pause`                | switch | En wizard/tamarit, desactiva pausas entre fases.     |
+| `--tamariz`                 | switch | Modo meetup: wizard condensado e interactivo.        |
+| `--no-pause`                | switch | En wizard/tamariz, desactiva pausas entre fases.     |
 | `--no-color`                | switch | Desactiva ANSI en toda la salida.                    |
 | `--mnemonic`                | `str`  | Mnemotécnica explícita de entrada.                   |
 | `--passphrase`              | `str`  | Passphrase BIP39 opcional.                           |

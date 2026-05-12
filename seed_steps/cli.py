@@ -31,15 +31,25 @@ from seed_steps.seed import (
 from seed_steps import terminal_style as ts
 from seed_steps.explanations import (
     MEETUP_INTRO,
+    PHASE_A_ENDIAN_NOTES,
     PHASE_A_INTRO,
+    PHASE_A_NOTES,
+    PHASE_BIG_LITTLE_ENDIAN_NOTE,
     PHASE_B_INTRO,
     PHASE_B_PBKDF2,
+    PHASE_B_STEPS,
     PHASE_C_INTRO,
+    PHASE_C_IL_IR_ENDIAN_NOTES,
     PHASE_C_IL_IR,
+    PHASE_C_SERIALIZATION_NOTES,
+    PHASE_C_STEPS,
+    PHASE_D_CKDPRIV_ENDIAN_NOTES,
     PHASE_D_INTRO,
     PHASE_D_HARDENED,
+    PHASE_D_STEPS,
     PHASE_E_INTRO,
     PHASE_E_HASH160,
+    PHASE_E_STEPS,
     PHASE_F_SUMMARY,
 )
 from seed_steps.trace import MathTrace
@@ -319,7 +329,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Inicia un asistente interactivo paso a paso.",
     )
     parser.add_argument(
-        "--tamarit",
+        "--tamariz",
         action="store_true",
         help="Modo meetup: wizard condensado con decisiones interactivas y menos pausas.",
     )
@@ -1117,24 +1127,62 @@ def _run_bip39_condensed_block(
     grouped_words = [" ".join(words[i : i + 4]) for i in range(0, len(words), 4)]
 
     print(f"\n{ts.dim('━' * 72)}")
-    print(
-        ts.bright_white("Fase A) BIP39 condensado — ENT -> CS -> bloques -> palabras")
-    )
+    print(ts.bright_white("Fase A) BIP39: de entropía a palabras"))
+    print(ts.bright_white("BIP39 1/5 — Entropía"))
+    print("- Idea: identificar la fuente y la longitud de entropía.")
+    print("- Datos:")
     print(f"- origen = {source_label}")
     if selected_entropy_bits is not None:
         print(f"- bits_entropia = {selected_entropy_bits}")
+    print(f"- entropy_hex = {breakdown.entropy_hex}")
     print(f"- ENT = {ent} bits")
+    print("- entropy_bits:")
+    print(
+        "  "
+        + format_bits_by_byte(breakdown.entropy_bits, bytes_per_line=4).replace(
+            "\n", "\n  "
+        )
+    )
+    print("- Resultado: entropía lista para checksum.")
+    print(ts.bright_white("BIP39 2/5 — Checksum"))
+    print("- Idea: agregar bits de control para detectar errores.")
+    print("- Datos:")
+    print(f"- SHA256(entropy) = {breakdown.sha256_hex}")
+    print("- Cálculo: CS = ENT/32")
     print(f"- CS = ENT/32 = {cs} bits")
     print(f"- checksum = {ts.pink(breakdown.checksum_bits)}")
+    print("- Resultado: checksum anexable a la entropía.")
+    print(ts.bright_white("BIP39 3/5 — Entropía + checksum"))
+    print("- Idea: crear el flujo binario total que define las palabras.")
+    print("- Datos:")
+    print(f"- entropy_bits = {breakdown.entropy_bits}")
+    print(f"- checksum_bits = {breakdown.checksum_bits}")
+    print("- Cálculo: concatenación = entropy_bits || checksum_bits")
+    print(f"- total_bits = ENT + CS = {ent + cs}")
+    print(f"- concatenacion = {breakdown.entropy_plus_checksum_bits}")
+    print("- Resultado: cadena lista para dividir en bloques de 11 bits.")
+    print(ts.bright_white("BIP39 4/5 — Bloques de 11 bits"))
+    print("- Idea: cada bloque de 11 bits representa un índice BIP39.")
+    print("- Explicación: 2048 = 2^11, por eso 11 bits cubren toda la wordlist.")
+    print("- Datos:")
     print(f"- bloques_11 = {len(breakdown.bit_blocks)}")
+    print(f"- bloques_11bit = {' | '.join(breakdown.bit_blocks)}")
+    print("- Resultado: índices listos para mapear a palabras.")
+    print(ts.bright_white("BIP39 5/5 — Índices y palabras"))
+    print("- Idea: traducir índices a palabras humanas.")
+    print("- Explicación: checksum detecta errores, NO corrige automáticamente.")
     print("- tabla bloque -> indice -> palabra:")
     print("  bloque | indice | palabra")
     print("  -------+--------+---------")
     for step in breakdown.steps:
         print(f"  {step.bit_block} | {step.index:4d} | {ts.orange(step.word)}")
-    print("- mnemotecnica:")
+    for note in PHASE_A_ENDIAN_NOTES:
+        print(f"- {note}")
+    print("- mnemotécnica:")
     for line in grouped_words:
         print("  " + " ".join(ts.orange(word) for word in line.split()))
+    for note in PHASE_A_NOTES:
+        print(f"- {note}")
 
     if not pause_between_steps:
         return "continue"
@@ -1169,11 +1217,30 @@ def _print_phase_seed_bip39(
     if meetup_mode:
         _print_meetup_text_block(PHASE_B_INTRO)
         _print_meetup_text_block(PHASE_B_PBKDF2)
-        print(ts.bright_white("Resumen compacto PBKDF2 (BIP39 -> seed)"))
-        print(f"- mnemonic = {_colorize(mnemonic, COLOR_WORD)}")
-        print(f"- passphrase = {_colorize(passphrase_display, COLOR_PASSPHRASE)}")
-        print(f"- salt = {_colorize(salt, COLOR_PASSPHRASE)}")
-        print("- PBKDF2-HMAC-SHA512: iterations=2048, dklen=64")
+        print(ts.bright_white(PHASE_B_STEPS["1_6"]))
+        print(f"- Idea: fijar entrada textual del KDF.")
+        print(f"- Datos: mnemonic = {_colorize(mnemonic, COLOR_WORD)}")
+        print("- Resultado: input listo para normalizar.")
+        print(ts.bright_white(PHASE_B_STEPS["2_6"]))
+        print("- Idea: canonizar Unicode para resultado determinista.")
+        print(f"- Datos: len(password_nfkd) = {len(mnemonic_bytes)} bytes")
+        print("- Cálculo: password = NFKD(mnemonic).encode('utf-8')")
+        print("- Resultado: password preparado para PBKDF2.")
+        print(ts.bright_white(PHASE_B_STEPS["3_6"]))
+        print("- Idea: aplicar segundo factor opcional.")
+        print(
+            f"- Datos: passphrase = {_colorize(passphrase_display, COLOR_PASSPHRASE)}"
+        )
+        print("- Resultado: passphrase normalizada.")
+        print(ts.bright_white(PHASE_B_STEPS["4_6"]))
+        print("- Idea: construir salt de dominio BIP39.")
+        print(f"- Datos: salt = {_colorize(salt, COLOR_PASSPHRASE)}")
+        print("- Cálculo: salt = 'mnemonic' + NFKD(passphrase)")
+        print("- Resultado: salt listo para PBKDF2.")
+        print(ts.bright_white(PHASE_B_STEPS["5_6"]))
+        print("- Idea: endurecer derivación con 2048 iteraciones.")
+        print("- Datos: PBKDF2-HMAC-SHA512, iterations=2048, dklen=64")
+        print("- Cálculo: U_1, U_2, U_3, ..., U_2046, U_2047, U_2048; T_1 = XOR(U_i)")
         print("- U-sequence visible:")
         print("  " + ts.bright_white("U_1, U_2, U_3, ..., U_2046, U_2047, U_2048"))
         print(
@@ -1207,7 +1274,11 @@ def _print_phase_seed_bip39(
             )
         )
         print(f"- {ts.formula('T_1 = U_1 XOR U_2 XOR ... XOR U_2048')}")
-        print(f"- seed (64 bytes) = {_colorize(seed_display, COLOR_SEED)}")
+        print("- Resultado: bloque T_1 consolidado.")
+        print(ts.bright_white(PHASE_B_STEPS["6_6"]))
+        print("- Idea: entregar la semilla final para BIP32.")
+        print(f"- Datos: seed_hex = {_colorize(seed_display, COLOR_SEED)}")
+        print("- Resultado: seed final de 64 bytes.")
         return {"seed_bytes": seed_bytes, "salt": salt}
 
     substeps = [
@@ -1450,11 +1521,24 @@ def _print_phase_master_bip32(
     if meetup_mode:
         _print_meetup_text_block(PHASE_C_INTRO)
         _print_meetup_text_block(PHASE_C_IL_IR)
-        print(ts.bright_white("Resumen compacto BIP32 master"))
-        print(f"- seed = {_colorize(seed_hex, COLOR_SEED)}")
-        print(f"- I = {_colorize(hmac_hex, COLOR_CHECKSUM)}")
-        print(f"- IL = {_colorize(il_hex, COLOR_IL)}")
-        print(f"- IR = {_colorize(ir_hex, COLOR_IR)}")
+        print(ts.bright_white(PHASE_C_STEPS["1_4"]))
+        print(f"- Idea: usar la seed como material raíz.")
+        print(f"- Datos: seed = {_colorize(seed_hex, COLOR_SEED)}")
+        print("- Resultado: entrada lista para HMAC BIP32.")
+        print(ts.bright_white(PHASE_C_STEPS["2_4"]))
+        print("- Idea: generar I de 64 bytes con clave fija de dominio.")
+        print(f"- Datos: hmac_key = 'Bitcoin seed'")
+        print(f"- Cálculo: I = HMAC-SHA512(key='Bitcoin seed', data=seed)")
+        print(f"- Resultado: I = {_colorize(hmac_hex, COLOR_CHECKSUM)}")
+        print(ts.bright_white(PHASE_C_STEPS["3_4"]))
+        print("- Idea: separar secreto y chain code.")
+        print(f"- Datos: I = IL || IR")
+        print(f"- Resultado: IL = {_colorize(il_hex, COLOR_IL)}")
+        print(f"- Resultado: IR = {_colorize(ir_hex, COLOR_IR)}")
+        for note in PHASE_C_IL_IR_ENDIAN_NOTES:
+            print(f"- {note}")
+        print(ts.bright_white(PHASE_C_STEPS["4_4"]))
+        print("- Idea: construir nodo maestro serializable.")
         print(
             "- xprv master = "
             + _colorize(
@@ -1462,6 +1546,9 @@ def _print_phase_master_bip32(
             )
         )
         print(f"- xpub master = {_colorize(master.xpub, COLOR_XPUB)}")
+        for note in PHASE_C_SERIALIZATION_NOTES:
+            print(f"- {note}")
+        print("- Resultado: nodo maestro listo para derivación HD.")
         return {"master": master}
 
     substeps = [
@@ -1641,16 +1728,25 @@ def _print_phase_hd_path(
     if meetup_mode:
         _print_meetup_text_block(PHASE_D_INTRO)
         _print_meetup_text_block(PHASE_D_HARDENED)
-        print(ts.bright_white("Resumen compacto ruta HD"))
-        print(f"- ruta = {path}")
-        print("- significado niveles:")
+        print(ts.bright_white(PHASE_D_STEPS["1_3"]))
+        print("- Idea: fijar la rama exacta del árbol HD.")
+        print(f"- Datos: ruta = {path}")
+        print("- Resultado: objetivo de derivación definido.")
+        print(ts.bright_white(PHASE_D_STEPS["2_3"]))
+        print("- Idea: interpretar semántica por nivel.")
+        print("- Datos: hardened usa apóstrofo (') y normal no.")
+        print("- Cálculo: hardened_index = index + 2^31")
+        print("- Resultado: niveles y significado:")
         for line in table_lines:
             print(f"  {line}")
-        print(
-            "- CKDpriv (resumen): child = CKDpriv(parent, index), hardened => index + 2^31"
-        )
+        print(ts.bright_white(PHASE_D_STEPS["3_3"]))
+        print("- Idea: derivar nodo final paso a paso con CKDpriv.")
+        print("- Cálculo: child = CKDpriv(parent, index), hardened => index + 2^31")
+        print("- Log CKDpriv:")
         for line in derivation_log:
             print(f"  {line}")
+        for note in PHASE_D_CKDPRIV_ENDIAN_NOTES:
+            print(f"- {note}")
         print(
             "- xprv derivado = "
             + _colorize(
@@ -1658,6 +1754,7 @@ def _print_phase_hd_path(
             )
         )
         print(f"- xpub derivado = {_colorize(current.xpub, COLOR_XPUB)}")
+        print("- Resultado: nodo final listo para construir dirección.")
         return {"derived": current}
 
     substeps = [
@@ -1802,19 +1899,29 @@ def _print_phase_address(
     if meetup_mode:
         _print_meetup_text_block(PHASE_E_INTRO)
         _print_meetup_text_block(PHASE_E_HASH160)
+        print(ts.bright_white(PHASE_E_STEPS["1_4"]))
         pubkey_hex = _display_sensitive(
             p2wpkh.compressed_pubkey.hex(), show_secrets=show_secrets
         )
-        print(ts.bright_white("Resumen compacto pubkey -> direccion"))
-        print(f"- pubkey comprimida = {_colorize(pubkey_hex, COLOR_XPUB)}")
-        print(f"- SHA256(pubkey) = {_colorize(sha256_pubkey_hex, COLOR_CHECKSUM)}")
+        print("- Idea: obtener la clave pública comprimida del nodo.")
+        print(f"- Datos: pubkey comprimida = {_colorize(pubkey_hex, COLOR_XPUB)}")
+        print("- Resultado: entrada para hash de dirección.")
+        print(ts.bright_white(PHASE_E_STEPS["2_4"]))
+        print("- Idea: construir HASH160 desde la pubkey.")
         print(
-            f"- HASH160 = RIPEMD160(SHA256(pubkey)) = {_colorize(hash160_hex, COLOR_IR)}"
+            f"- Datos: SHA256(pubkey) = {_colorize(sha256_pubkey_hex, COLOR_CHECKSUM)}"
         )
-        print(f"- witness = {_colorize(witness_line, COLOR_CHECKSUM)}")
-        print(f"- hrp = {p2wpkh.hrp} (network={network})")
-        print("- Bech32 = hrp + '1' + data_5bit + checksum")
-        print(f"- direccion = {ts.bright_white(p2wpkh.address)}")
+        print(
+            f"- Cálculo: HASH160 = RIPEMD160(SHA256(pubkey)) = {_colorize(hash160_hex, COLOR_IR)}"
+        )
+        print("- Resultado: witness program de 20 bytes disponible.")
+        print(ts.bright_white(PHASE_E_STEPS["3_4"]))
+        print(f"- Datos: witness = {_colorize(witness_line, COLOR_CHECKSUM)}")
+        print(f"- Datos: hrp = {p2wpkh.hrp} (network={network})")
+        print("- Cálculo: Bech32 = hrp + '1' + data_5bit + checksum")
+        print("- Resultado: cadena Bech32 lista.")
+        print(ts.bright_white(PHASE_E_STEPS["4_4"]))
+        print(f"- Resultado: direccion = {ts.bright_white(p2wpkh.address)}")
         return {"final_addr": p2wpkh}
 
     substeps = [
@@ -1960,6 +2067,8 @@ def _print_phase_final_summary(
     print("\nFase F) Resumen final")
     if meetup_mode:
         _print_meetup_text_block(PHASE_F_SUMMARY)
+        for note in PHASE_BIG_LITTLE_ENDIAN_NOTE:
+            print(f"- {note}")
     print(f"{ts.dim('━' * 88)}")
     print(ts.bright_white("Inputs usados:"))
     colored_mnemonic = " ".join(
@@ -1980,14 +2089,15 @@ def _print_phase_final_summary(
     print()
     print(f"- network = {network}")
 
-    print()
-    print(ts.bright_white("Transformaciones clave:"))
-    print()
-    print("- A) ENT + CS -> bloques(11) -> mnemonic")
-    print("- B) mnemonic + passphrase -> PBKDF2(2048) -> seed")
-    print("- C) seed -> HMAC-SHA512('Bitcoin seed') -> IL/IR -> xprv/xpub master")
-    print("- D) master + ruta HD -> CKDpriv -> xprv/xpub derivado")
-    print("- E) pubkey -> SHA256 -> HASH160 -> witness -> Bech32")
+    if not meetup_mode:
+        print()
+        print(ts.bright_white("Transformaciones clave:"))
+        print()
+        print("- A) ENT + CS -> bloques(11) -> mnemonic")
+        print("- B) mnemonic + passphrase -> PBKDF2(2048) -> seed")
+        print("- C) seed -> HMAC-SHA512('Bitcoin seed') -> IL/IR -> xprv/xpub master")
+        print("- D) master + ruta HD -> CKDpriv -> xprv/xpub derivado")
+        print("- E) pubkey -> SHA256 -> HASH160 -> witness -> Bech32")
 
     print()
     print(ts.bright_white("Outputs clave:"))
@@ -2799,15 +2909,15 @@ def run() -> int:
         )
         return 3
 
-    if args.interactive or args.tamarit:
+    meetup_mode = args.tamariz
+
+    if args.interactive or meetup_mode:
         preset_entropy = None
         argv_tokens = sys.argv[1:]
         network_override = (
-            args.network if (args.tamarit and "--network" in argv_tokens) else None
+            args.network if (meetup_mode and "--network" in argv_tokens) else None
         )
-        path_override = (
-            args.path if (args.tamarit and "--path" in argv_tokens) else None
-        )
+        path_override = args.path if (meetup_mode and "--path" in argv_tokens) else None
         if args.entropy:
             try:
                 preset_entropy = parse_entropy_hex(args.entropy)
@@ -2827,7 +2937,7 @@ def run() -> int:
             no_pause=args.no_pause,
             default_passphrase=args.passphrase,
             summary_raw=args.summary_raw,
-            meetup_mode=args.tamarit,
+            meetup_mode=meetup_mode,
             network_override=network_override,
             path_override=path_override,
         )
