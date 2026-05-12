@@ -104,6 +104,21 @@ def test_colorize_checksum_by_global_position_without_color_returns_plain_text()
     cli.ts.set_enabled(True)
 
 
+def test_colorize_bit_prefix_colors_only_first_n_bits(monkeypatch) -> None:
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
+    cli.ts.set_enabled(True)
+
+    rendered = cli._colorize_bit_prefix(
+        "00000000 11111111",
+        prefix_len=4,
+        color=cli.COLOR_CHECKSUM,
+    )
+
+    assert rendered.count(cli.COLOR_CHECKSUM) == 1
+    assert f"{cli.COLOR_CHECKSUM}0000{cli.COLOR_RESET}" in rendered
+    assert "11111111" in rendered
+
+
 def test_cli_compact_output_hides_detailed_table(capsys, monkeypatch) -> None:
     monkeypatch.setattr(
         sys,
@@ -535,7 +550,12 @@ def test_cli_tamariz_shows_phase_narrative_and_hides_removed_micro_substeps(
     assert exit_code == 0
     assert captured.err == ""
     assert "BIP39 1/5 — Entropía" in captured.out
+    assert "BIP39 2/5 — Checksum" in captured.out
     assert "BIP39 3/5 — Entropía + checksum" in captured.out
+    assert "entropy_bits" in captured.out
+    assert "entropy_hex" in captured.out
+    assert "SHA256(entropy)_bits" in captured.out
+    assert "checksum =" in captured.out
     assert "BIP39 4/5 — Bloques de 11 bits" in captured.out
     assert "checksum_bits" in captured.out
     assert "entropy_plus_checksum" in captured.out

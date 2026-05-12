@@ -186,6 +186,29 @@ def _format_segmented_bits_multiline(
     return "\n".join(lines)
 
 
+def _colorize_bit_prefix(bits: str, *, prefix_len: int, color: str) -> str:
+    if prefix_len <= 0:
+        return bits
+    start_idx: int | None = None
+    end_idx: int | None = None
+    bit_count = 0
+    for idx, ch in enumerate(bits):
+        if ch not in {"0", "1"}:
+            continue
+        bit_count += 1
+        if start_idx is None:
+            start_idx = idx
+        end_idx = idx
+        if bit_count == prefix_len:
+            break
+
+    if start_idx is None or end_idx is None:
+        return bits
+
+    prefix_segment = bits[start_idx : end_idx + 1]
+    return f"{bits[:start_idx]}{_colorize(prefix_segment, color)}{bits[end_idx + 1 :]}"
+
+
 def _print_substep_section(title: str) -> None:
     print()
     print(ts.bright_white(title))
@@ -1183,15 +1206,15 @@ def _run_bip39_condensed_block(
     print(f"  - origen = {source_label}")
     if selected_entropy_bits is not None:
         print(f"  - bits_entropia = {selected_entropy_bits}")
-    print(f"  - entropy_hex = {breakdown.entropy_hex}")
     print(f"  - ENT = {ent} bits")
-    print("- entropy_bits:")
+    print("  - entropy_bits:")
     print(
-        "  "
+        "    "
         + format_bits_by_byte(breakdown.entropy_bits, bytes_per_line=4).replace(
-            "\n", "\n  "
+            "\n", "\n    "
         )
     )
+    print(f"  - entropy_hex = {breakdown.entropy_hex}")
     print("- Resultado: entropía lista para checksum.")
 
     print()
@@ -1200,6 +1223,17 @@ def _run_bip39_condensed_block(
     print("- Idea: agregar bits de control para detectar errores.")
     print("- Datos:")
     print(f"  - SHA256(entropy) = {breakdown.sha256_hex}")
+    print("  - SHA256(entropy)_bits:")
+    sha256_bits = bin(int(breakdown.sha256_hex, 16))[2:].zfill(256)
+    sha256_bits_grouped = format_bits_by_byte(sha256_bits, bytes_per_line=4)
+    print(
+        "    "
+        + _colorize_bit_prefix(
+            sha256_bits_grouped,
+            prefix_len=cs,
+            color=COLOR_CHECKSUM,
+        ).replace("\n", "\n    ")
+    )
     print("- Cálculo: CS = ENT/32")
     print(f"- CS = ENT/32 = {cs} bits")
     print(f"- checksum = {_colorize(breakdown.checksum_bits, COLOR_CHECKSUM)}")
