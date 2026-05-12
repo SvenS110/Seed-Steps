@@ -496,6 +496,9 @@ def test_cli_tamariz_shows_phase_narrative_and_hides_removed_micro_substeps(
     assert exit_code == 0
     assert captured.err == ""
     assert "BIP39 1/5 — Entropía" in captured.out
+    assert "BIP39 3/5 — Entropía + checksum" in captured.out
+    assert "checksum_bits" in captured.out
+    assert "[01]" in captured.out
     assert "BIP39 5/5 — Índices y palabras" in captured.out
     assert "Cada bloque de 11 bits se lee en big-endian" in captured.out
     assert "BIP39 1/6 — Mnemotécnica de entrada" in captured.out
@@ -512,11 +515,13 @@ def test_cli_tamariz_shows_phase_narrative_and_hides_removed_micro_substeps(
     assert "Dirección 2/4 — HASH160 (incluye SHA256)" in captured.out
     assert "Dirección 3/4 — Witness + Bech32" in captured.out
     assert "Dirección 4/4 — Dirección final" in captured.out
-    assert "Fase B) Seed BIP39" in captured.out
-    assert "Fase C) Master BIP32" in captured.out
-    assert "Fase D) Ruta HD" in captured.out
-    assert "Fase E) Direccion" in captured.out
-    assert "Fase F) Resumen final" in captured.out
+    assert "Etapa 1/5 completada" not in captured.out
+    assert "Fase B) Seed BIP39" not in captured.out
+    assert "Fase B — BIP39: de palabras a seed" in captured.out
+    assert "Fase C — BIP32: de seed a nodo maestro" in captured.out
+    assert "Fase D — Ruta HD" in captured.out
+    assert "Fase E — De clave pública a dirección" in captured.out
+    assert "Fase F — Resumen final" in captured.out
     assert "En transacciones Bitcoin aparece mucho little-endian" in captured.out
     assert "Las palabras no se usan directamente como clave" in captured.out
     assert "BIP39 termina en la seed" in captured.out
