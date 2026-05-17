@@ -350,6 +350,8 @@ m/84'/0'/0'/0/0
 hardened_index = index + 2^31
 ```
 
+Nota: en rutas BIP84, el modo `--tamariz` muestra `zprv/zpub` en mainnet y `vprv/vpub` en testnet para wallets native SegWit; la clave y el chain code son los mismos, cambia la serializacion (version bytes).
+
 ### F) Dirección P2WPKH/Bech32
 
 La clave pública comprimida del nodo derivado se transforma en una dirección SegWit nativa:

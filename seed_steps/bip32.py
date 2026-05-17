@@ -16,6 +16,10 @@ SECP256K1_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B
 
 MAINNET_XPRV_VERSION = bytes.fromhex("0488ade4")
 MAINNET_XPUB_VERSION = bytes.fromhex("0488b21e")
+MAINNET_ZPRV_VERSION = bytes.fromhex("04b2430c")
+MAINNET_ZPUB_VERSION = bytes.fromhex("04b24746")
+TESTNET_VPRV_VERSION = bytes.fromhex("045f18bc")
+TESTNET_VPUB_VERSION = bytes.fromhex("045f1cf6")
 _BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 HARDENED_OFFSET = 0x80000000
 
@@ -211,9 +215,10 @@ def serialize_extended_private_key(
     depth: int = 0,
     parent_fingerprint: bytes = b"\x00\x00\x00\x00",
     child_number: int = 0,
+    version: bytes = MAINNET_XPRV_VERSION,
 ) -> str:
     payload = (
-        MAINNET_XPRV_VERSION
+        version
         + bytes([depth])
         + parent_fingerprint
         + child_number.to_bytes(4, "big")
@@ -230,10 +235,11 @@ def serialize_extended_public_key(
     depth: int = 0,
     parent_fingerprint: bytes = b"\x00\x00\x00\x00",
     child_number: int = 0,
+    version: bytes = MAINNET_XPUB_VERSION,
 ) -> str:
     public_key = _compressed_pubkey_from_private_key(private_key)
     payload = (
-        MAINNET_XPUB_VERSION
+        version
         + bytes([depth])
         + parent_fingerprint
         + child_number.to_bytes(4, "big")
@@ -241,6 +247,36 @@ def serialize_extended_public_key(
         + public_key
     )
     return base58check_encode(payload)
+
+
+def serialize_bip84_extended_keys(node: BIP32Node, network: str) -> tuple[str, str]:
+    if network == "mainnet":
+        prv_version = MAINNET_ZPRV_VERSION
+        pub_version = MAINNET_ZPUB_VERSION
+    elif network == "testnet":
+        prv_version = TESTNET_VPRV_VERSION
+        pub_version = TESTNET_VPUB_VERSION
+    else:
+        raise ValueError("Red invalida: usa mainnet o testnet")
+
+    return (
+        serialize_extended_private_key(
+            node.private_key,
+            node.chain_code,
+            depth=node.depth,
+            parent_fingerprint=node.parent_fingerprint,
+            child_number=node.child_number,
+            version=prv_version,
+        ),
+        serialize_extended_public_key(
+            node.private_key,
+            node.chain_code,
+            depth=node.depth,
+            parent_fingerprint=node.parent_fingerprint,
+            child_number=node.child_number,
+            version=pub_version,
+        ),
+    )
 
 
 def base58check_encode(payload: bytes) -> str:

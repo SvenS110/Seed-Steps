@@ -19,6 +19,7 @@ from seed_steps.bip32 import (
     derive_bip32_node_from_master,
     derive_bip32_path_from_node,
     parse_bip32_path,
+    serialize_bip84_extended_keys,
 )
 from seed_steps.bip39 import build_bip39_breakdown, load_wordlist
 from seed_steps.entropy import generate_entropy, parse_entropy_hex
@@ -1825,6 +1826,7 @@ def _print_phase_master_bip32(
 def _print_phase_hd_path(
     master,
     path: str,
+    network: str,
     *,
     show_secrets: bool,
     interactive_micro_steps: bool = False,
@@ -1891,13 +1893,39 @@ def _print_phase_hd_path(
             print(f"  {line}")
         for note in PHASE_D_CKDPRIV_ENDIAN_NOTES:
             print(f"- {note}")
+        is_leaf_00 = (
+            len(parsed) >= 2 and parsed[-2].token == "0" and parsed[-1].token == "0"
+        )
+        derived_label = (
+            "derivado (nodo hoja /0/0, no account)" if is_leaf_00 else "derivado"
+        )
         print(
-            "- xprv derivado = "
+            f"- xprv {derived_label} = "
             + _colorize(
                 _display_sensitive(current.xprv, show_secrets=show_secrets), COLOR_XPRV
             )
         )
-        print(f"- xpub derivado = {_colorize(current.xpub, COLOR_XPUB)}")
+        print(f"- xpub {derived_label} = {_colorize(current.xpub, COLOR_XPUB)}")
+        is_bip84_path = bool(parsed) and parsed[0].token == "84'"
+        if is_bip84_path:
+            ext_prv, ext_pub = serialize_bip84_extended_keys(current, network)
+            prv_prefix = "zprv" if network == "mainnet" else "vprv"
+            pub_prefix = "zpub" if network == "mainnet" else "vpub"
+            print("- Matiz: xprv/xpub usan serialización clásica BIP32.")
+            print("- Matiz: BIP84 cambia version bytes para compatibilidad de wallets.")
+            print(
+                f"- Matiz: mainnet usa zprv/zpub y testnet usa vprv/vpub (red actual: {network})."
+            )
+            print(
+                "- Matiz: clave privada/pública y chain code no cambian; cambia solo serialización/display."
+            )
+            print(
+                f"- {prv_prefix} {derived_label} = "
+                + _colorize(
+                    _display_sensitive(ext_prv, show_secrets=show_secrets), COLOR_XPRV
+                )
+            )
+            print(f"- {pub_prefix} {derived_label} = {_colorize(ext_pub, COLOR_XPUB)}")
         print("- Resultado: nodo final listo para construir dirección.")
         return {"derived": current}
 
@@ -2338,6 +2366,7 @@ def _run_interactive_guided_pipeline(state: dict[str, object]) -> int:
             path_artifacts = _print_phase_hd_path(
                 state["master"],
                 str(state["path"]),
+                str(state["network"]),
                 show_secrets=bool(state["show_secrets"]),
             )
             state.update(path_artifacts)
@@ -2596,6 +2625,7 @@ def _run_interactive(
                 path_artifacts = _print_phase_hd_path(
                     state["master"],
                     path,
+                    str(state["network"]),
                     show_secrets=True,
                     interactive_micro_steps=(not no_pause) and (not meetup_mode),
                     meetup_mode=meetup_mode,

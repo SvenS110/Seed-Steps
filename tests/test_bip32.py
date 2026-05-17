@@ -6,6 +6,7 @@ from seed_steps.bip32 import (
     derive_bip32_node_from_master,
     derive_bip32_path_from_node,
     parse_bip32_path,
+    serialize_bip84_extended_keys,
 )
 from seed_steps.seed import derive_bip39_seed
 
@@ -148,3 +149,20 @@ def test_p2wpkh_address_testnet_known_vector() -> None:
         "02e7ab2537b5d49e970309aae06e9e49f36ce1c9febbd44ec8e0d1cca0b4f9c319"
     )
     assert p2wpkh.address == "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl"
+
+
+def test_serialize_bip84_extended_keys_uses_expected_prefixes_by_network() -> None:
+    mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    seed = derive_bip39_seed(mnemonic, "")
+    master = derive_bip32_master_node(seed)
+    root = derive_bip32_node_from_master(master)
+
+    mainnet_node = derive_bip32_path_from_node(root, "m/84'/0'/0'/0/0")
+    zprv, zpub = serialize_bip84_extended_keys(mainnet_node, "mainnet")
+    assert zprv.startswith("zprv")
+    assert zpub.startswith("zpub")
+
+    testnet_node = derive_bip32_path_from_node(root, "m/84'/1'/0'/0/0")
+    vprv, vpub = serialize_bip84_extended_keys(testnet_node, "testnet")
+    assert vprv.startswith("vprv")
+    assert vpub.startswith("vpub")

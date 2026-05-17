@@ -729,6 +729,72 @@ def test_cli_tamariz_path_override_skips_path_prompt(capsys, monkeypatch) -> Non
     assert "- path = m/84'/1'/0'/0/0" in captured.out
 
 
+def test_cli_tamariz_bip84_mainnet_shows_zprv_zpub_in_phase_d(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tamariz",
+            "--path",
+            "m/84'/0'/0'/0/0",
+            "--network",
+            "mainnet",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-color",
+            "--no-pause",
+        ],
+    )
+
+    inputs = iter([""])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "- xprv derivado (nodo hoja /0/0, no account) = xprv" in captured.out
+    assert "- xpub derivado (nodo hoja /0/0, no account) = xpub" in captured.out
+    assert "- zprv derivado (nodo hoja /0/0, no account) = zprv" in captured.out
+    assert "- zpub derivado (nodo hoja /0/0, no account) = zpub" in captured.out
+
+
+def test_cli_tamariz_bip84_testnet_shows_vprv_vpub_in_phase_d(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "seed-steps",
+            "--tamariz",
+            "--path",
+            "m/84'/1'/0'/0/0",
+            "--network",
+            "testnet",
+            "--entropy",
+            "00000000000000000000000000000000",
+            "--no-color",
+            "--no-pause",
+        ],
+    )
+
+    inputs = iter([""])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+
+    exit_code = run()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "- vprv derivado (nodo hoja /0/0, no account) = vprv" in captured.out
+    assert "- vpub derivado (nodo hoja /0/0, no account) = vpub" in captured.out
+
+
 def test_cli_wizard_no_pause_entropy_zero_shows_known_bip39_math_trace(
     capsys, monkeypatch
 ) -> None:
