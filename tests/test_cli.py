@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import seed_steps.cli as cli
+import seed_steps.rendering as rendering
 from seed_steps.cli import run
 
 
@@ -72,18 +73,18 @@ def test_colorize_checksum_by_global_position_inserts_ansi_after_entropy(
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
     cli.ts.set_enabled(True)
 
-    rendered = cli._colorize_checksum_by_global_position(
+    rendered = rendering._colorize_checksum_by_global_position(
         "00000000 0011",
         bit_offset=124,
         entropy_bits_len=128,
     )
 
-    assert cli.COLOR_CHECKSUM != cli.COLOR_SEED
+    assert rendering.COLOR_CHECKSUM != cli.COLOR_SEED
     assert "0000" in rendered
-    assert cli.COLOR_CHECKSUM in rendered
-    assert f"{cli.COLOR_CHECKSUM}0{cli.COLOR_RESET}" in rendered
+    assert rendering.COLOR_CHECKSUM in rendered
+    assert f"{rendering.COLOR_CHECKSUM}0{rendering.COLOR_RESET}" in rendered
     assert (
-        f"{cli.COLOR_CHECKSUM}1{cli.COLOR_RESET}{cli.COLOR_CHECKSUM}1{cli.COLOR_RESET}"
+        f"{rendering.COLOR_CHECKSUM}1{rendering.COLOR_RESET}{rendering.COLOR_CHECKSUM}1{rendering.COLOR_RESET}"
         in rendered
     )
 
@@ -93,14 +94,14 @@ def test_colorize_checksum_by_global_position_without_color_returns_plain_text()
 ):
     cli.ts.set_enabled(False)
 
-    rendered = cli._colorize_checksum_by_global_position(
+    rendered = rendering._colorize_checksum_by_global_position(
         "00000000 0011",
         bit_offset=124,
         entropy_bits_len=128,
     )
 
     assert rendered == "00000000 0011"
-    assert cli.COLOR_CHECKSUM not in rendered
+    assert rendering.COLOR_CHECKSUM not in rendered
     cli.ts.set_enabled(True)
 
 
@@ -108,14 +109,14 @@ def test_colorize_bit_prefix_colors_only_first_n_bits(monkeypatch) -> None:
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
     cli.ts.set_enabled(True)
 
-    rendered = cli._colorize_bit_prefix(
+    rendered = rendering._colorize_bit_prefix(
         "00000000 11111111",
         prefix_len=4,
-        color=cli.COLOR_CHECKSUM,
+        color=rendering.COLOR_CHECKSUM,
     )
 
-    assert rendered.count(cli.COLOR_CHECKSUM) == 1
-    assert f"{cli.COLOR_CHECKSUM}0000{cli.COLOR_RESET}" in rendered
+    assert rendered.count(rendering.COLOR_CHECKSUM) == 1
+    assert f"{rendering.COLOR_CHECKSUM}0000{rendering.COLOR_RESET}" in rendered
     assert "11111111" in rendered
 
 

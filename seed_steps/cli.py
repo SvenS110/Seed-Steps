@@ -30,6 +30,19 @@ from seed_steps.seed import (
     normalize_bip39_text,
 )
 from seed_steps import terminal_style as ts
+from seed_steps.rendering import (
+    COLOR_CHECKSUM,
+    COLOR_ENTROPY,
+    _color_segmented_bits,
+    _colorize,
+    _colorize_bit_prefix,
+    _colorize_checksum_by_global_position,
+    _colorized_11_bit_block,
+    _format_segmented_bits_multiline,
+    _print_meetup_intro_without_title,
+    _print_meetup_phase_title,
+    _print_meetup_text_block,
+)
 from seed_steps.explanations import (
     MEETUP_INTRO,
     PHASE_A_ENDIAN_NOTES,
@@ -86,9 +99,6 @@ def _print_secrets_warning() -> None:
     print("NO uses semillas o claves reales en este modo.")
 
 
-COLOR_RESET = "\033[0m"
-COLOR_ENTROPY = "\033[96m"
-COLOR_CHECKSUM = "\033[95m"
 COLOR_WORD = "\033[38;5;208m"
 COLOR_PASSPHRASE = "\033[95m"
 COLOR_SEED = "\033[93m"
@@ -97,15 +107,6 @@ COLOR_IR = "\033[35m"
 COLOR_XPRV = "\033[91m"
 COLOR_XPUB = "\033[36m"
 COLOR_FINAL_ADDRESS = "\033[92m"
-MEETUP_PHASE_SEPARATOR = (
-    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-)
-
-
-def _colorize(value: str, color: str, *, enable: bool = True) -> str:
-    if not enable or not ts.is_enabled():
-        return value
-    return f"{color}{value}{COLOR_RESET}"
 
 
 def _format_bits_multiline(bits: str, *, bytes_per_line: int = 8) -> str:
@@ -153,61 +154,6 @@ def format_key_material(label: str, value: str, *, color: str | None = None) -> 
 
 def format_derivation_path(path: str) -> str:
     return " -> ".join(token for token in path.split("/") if token)
-
-
-def _color_segmented_bits(bits: str, *, bit_offset: int, entropy_bits_len: int) -> str:
-    rendered: list[str] = []
-    for idx, bit in enumerate(bits):
-        absolute = bit_offset + idx
-        if absolute < entropy_bits_len:
-            rendered.append(_colorize(bit, COLOR_ENTROPY))
-        else:
-            rendered.append(_colorize(bit, COLOR_CHECKSUM))
-    return "".join(rendered)
-
-
-def _format_segmented_bits_multiline(
-    bits: str, *, entropy_bits_len: int, bytes_per_line: int = 8
-) -> str:
-    line_size = max(1, bytes_per_line) * 8
-    lines: list[str] = []
-    for start in range(0, len(bits), line_size):
-        line_bits = bits[start : start + line_size]
-        groups: list[str] = []
-        for i in range(0, len(line_bits), 8):
-            chunk = line_bits[i : i + 8]
-            groups.append(
-                _color_segmented_bits(
-                    chunk,
-                    bit_offset=start + i,
-                    entropy_bits_len=entropy_bits_len,
-                )
-            )
-        lines.append(" ".join(groups))
-    return "\n".join(lines)
-
-
-def _colorize_bit_prefix(bits: str, *, prefix_len: int, color: str) -> str:
-    if prefix_len <= 0:
-        return bits
-    start_idx: int | None = None
-    end_idx: int | None = None
-    bit_count = 0
-    for idx, ch in enumerate(bits):
-        if ch not in {"0", "1"}:
-            continue
-        bit_count += 1
-        if start_idx is None:
-            start_idx = idx
-        end_idx = idx
-        if bit_count == prefix_len:
-            break
-
-    if start_idx is None or end_idx is None:
-        return bits
-
-    prefix_segment = bits[start_idx : end_idx + 1]
-    return f"{bits[:start_idx]}{_colorize(prefix_segment, color)}{bits[end_idx + 1 :]}"
 
 
 def _print_substep_section(title: str) -> None:
@@ -297,50 +243,6 @@ def _pbkdf2_u_sequence(
         u = hmac.new(password, u, hashlib.sha512).digest()
         u_values.append(u)
     return u_values
-
-
-def _colorized_11_bit_block(block: str, start_bit: int, entropy_bits_len: int) -> str:
-    end_bit = start_bit + len(block)
-    entropy_part_len = max(0, min(entropy_bits_len, end_bit) - start_bit)
-    checksum_part_len = len(block) - entropy_part_len
-    entropy_part = block[:entropy_part_len]
-    checksum_part = block[entropy_part_len : entropy_part_len + checksum_part_len]
-    return (
-        f"{_colorize(entropy_part, COLOR_ENTROPY)}"
-        f"{_colorize(checksum_part, COLOR_CHECKSUM)}"
-    )
-
-
-def _colorize_checksum_suffix(bits: str, checksum_suffix_len: int) -> str:
-    if checksum_suffix_len <= 0:
-        return bits
-    if checksum_suffix_len >= len(bits):
-        return _colorize(bits, COLOR_CHECKSUM)
-    prefix = bits[:-checksum_suffix_len]
-    suffix = bits[-checksum_suffix_len:]
-    return f"{prefix}{_colorize(suffix, COLOR_CHECKSUM)}"
-
-
-def _colorize_checksum_by_global_position(
-    text: str,
-    *,
-    bit_offset: int,
-    entropy_bits_len: int,
-    checksum_color: str = COLOR_CHECKSUM,
-) -> str:
-    rendered: list[str] = []
-    bit_index = 0
-    for char in text:
-        if char in {"0", "1"}:
-            absolute = bit_offset + bit_index
-            if absolute >= entropy_bits_len:
-                rendered.append(_colorize(char, checksum_color))
-            else:
-                rendered.append(char)
-            bit_index += 1
-        else:
-            rendered.append(char)
-    return "".join(rendered)
 
 
 def _prompt_micro_operation(
@@ -965,26 +867,6 @@ def _pause_for_meetup_phase(*, phase_label: str, no_pause: bool) -> None:
     if no_pause:
         return
     input(f"\nPulsa Enter para {phase_label}.")
-
-
-def _print_meetup_text_block(lines: list[str]) -> None:
-    print()
-    for line in lines:
-        print(line)
-
-
-def _print_meetup_intro_without_title(lines: list[str], title: str) -> None:
-    intro_lines = lines
-    if lines and lines[0].strip() == title.strip():
-        intro_lines = lines[1:]
-    _print_meetup_text_block(intro_lines)
-
-
-def _print_meetup_phase_title(title: str) -> None:
-    print()
-    print(ts.bright_white(title))
-    print(MEETUP_PHASE_SEPARATOR)
-    print()
 
 
 def _run_bip39_guided_substeps(
