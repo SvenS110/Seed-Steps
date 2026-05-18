@@ -56,13 +56,11 @@ from seed_steps.tamariz_renderer import (
     render_tamariz_phase_b_seed,
     render_tamariz_phase_c_master,
     render_tamariz_phase_d_hd_path,
+    render_tamariz_phase_e_address,
 )
 from seed_steps.explanations import (
     MEETUP_INTRO,
     PHASE_BIG_LITTLE_ENDIAN_NOTE,
-    PHASE_E_INTRO,
-    PHASE_E_HASH160,
-    PHASE_E_STEPS,
     PHASE_F_SUMMARY,
 )
 from seed_steps.trace import MathTrace
@@ -1707,9 +1705,7 @@ def _print_phase_address(
     meetup_mode: bool = False,
 ) -> dict[str, object]:
     p2wpkh = derive_p2wpkh_address_from_node(derived, network)
-    if meetup_mode:
-        _print_meetup_phase_title("Fase E — De clave pública a dirección")
-    else:
+    if not meetup_mode:
         print("\nFase E) Direccion")
     hash160_hex = _display_sensitive(p2wpkh.hash160.hex(), show_secrets=show_secrets)
     sha256_pubkey_hex = _display_sensitive(
@@ -1717,37 +1713,17 @@ def _print_phase_address(
     )
     witness_line = f"OP_{p2wpkh.witness_version} {p2wpkh.witness_program.hex()}"
     if meetup_mode:
-        _print_meetup_intro_without_title(
-            PHASE_E_INTRO, "Fase E — De clave pública a dirección"
+        render_tamariz_phase_e_address(
+            network=network,
+            pubkey_hex_display=_display_sensitive(
+                p2wpkh.compressed_pubkey.hex(), show_secrets=show_secrets
+            ),
+            sha256_pubkey_hex_display=sha256_pubkey_hex,
+            hash160_hex_display=hash160_hex,
+            witness_line=witness_line,
+            hrp=p2wpkh.hrp,
+            final_address=p2wpkh.address,
         )
-        _print_meetup_text_block(PHASE_E_HASH160)
-        print()
-        print(ts.bright_white(PHASE_E_STEPS["1_4"]))
-        pubkey_hex = _display_sensitive(
-            p2wpkh.compressed_pubkey.hex(), show_secrets=show_secrets
-        )
-        print("- Idea: obtener la clave pública comprimida del nodo.")
-        print(f"- Datos: pubkey comprimida = {_colorize(pubkey_hex, COLOR_XPUB)}")
-        print("- Resultado: entrada para hash de dirección.")
-        print()
-        print(ts.bright_white(PHASE_E_STEPS["2_4"]))
-        print("- Idea: construir HASH160 desde la pubkey.")
-        print(
-            f"- Datos: SHA256(pubkey) = {_colorize(sha256_pubkey_hex, COLOR_CHECKSUM)}"
-        )
-        print(
-            f"- Cálculo: HASH160 = RIPEMD160(SHA256(pubkey)) = {_colorize(hash160_hex, COLOR_IR)}"
-        )
-        print("- Resultado: witness program de 20 bytes disponible.")
-        print()
-        print(ts.bright_white(PHASE_E_STEPS["3_4"]))
-        print(f"- Datos: witness = {_colorize(witness_line, COLOR_CHECKSUM)}")
-        print(f"- Datos: hrp = {p2wpkh.hrp} (network={network})")
-        print("- Cálculo: Bech32 = hrp + '1' + data_5bit + checksum")
-        print("- Resultado: cadena Bech32 lista.")
-        print()
-        print(ts.bright_white(PHASE_E_STEPS["4_4"]))
-        print(f"- Resultado: direccion = {ts.bright_white(p2wpkh.address)}")
         return {"final_addr": p2wpkh}
 
     substeps = [

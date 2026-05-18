@@ -19,6 +19,9 @@ from seed_steps.explanations import (
     PHASE_D_HARDENED,
     PHASE_D_INTRO,
     PHASE_D_STEPS,
+    PHASE_E_HASH160,
+    PHASE_E_INTRO,
+    PHASE_E_STEPS,
 )
 from seed_steps.rendering import (
     COLOR_CHECKSUM,
@@ -351,3 +354,44 @@ def render_tamariz_phase_d_hd_path(
                 + _colorize(bip84_ext_pub, COLOR_XPUB)
             )
     print("- Resultado: nodo final listo para construir dirección.")
+
+
+def render_tamariz_phase_e_address(
+    *,
+    network: str,
+    pubkey_hex_display: str,
+    sha256_pubkey_hex_display: str,
+    hash160_hex_display: str,
+    witness_line: str,
+    hrp: str,
+    final_address: str,
+) -> None:
+    _print_meetup_phase_title("Fase E — De clave pública a dirección")
+    _print_meetup_intro_without_title(
+        PHASE_E_INTRO, "Fase E — De clave pública a dirección"
+    )
+    _print_meetup_text_block(PHASE_E_HASH160)
+    print()
+    print(ts.bright_white(PHASE_E_STEPS["1_4"]))
+    print("- Idea: obtener la clave pública comprimida del nodo.")
+    print(f"- Datos: pubkey comprimida = {_colorize(pubkey_hex_display, COLOR_XPUB)}")
+    print("- Resultado: entrada para hash de dirección.")
+    print()
+    print(ts.bright_white(PHASE_E_STEPS["2_4"]))
+    print("- Idea: construir HASH160 desde la pubkey.")
+    print(
+        f"- Datos: SHA256(pubkey) = {_colorize(sha256_pubkey_hex_display, COLOR_CHECKSUM)}"
+    )
+    print(
+        f"- Cálculo: HASH160 = RIPEMD160(SHA256(pubkey)) = {_colorize(hash160_hex_display, COLOR_IR)}"
+    )
+    print("- Resultado: witness program de 20 bytes disponible.")
+    print()
+    print(ts.bright_white(PHASE_E_STEPS["3_4"]))
+    print(f"- Datos: witness = {_colorize(witness_line, COLOR_CHECKSUM)}")
+    print(f"- Datos: hrp = {hrp} (network={network})")
+    print("- Cálculo: Bech32 = hrp + '1' + data_5bit + checksum")
+    print("- Resultado: cadena Bech32 lista.")
+    print()
+    print(ts.bright_white(PHASE_E_STEPS["4_4"]))
+    print(f"- Resultado: direccion = {ts.bright_white(final_address)}")
