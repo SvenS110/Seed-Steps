@@ -505,3 +505,41 @@ Este proyecto se publica bajo licencia MIT. Consulta el archivo [LICENSE](LICENS
 
 Seed Steps es una herramienta educativa. La licencia permite usar, estudiar,
 modificar y redistribuir el código, pero el software se ofrece sin garantías.
+
+## Desinstalación
+
+La desinstalación depende de cómo instalaste la herramienta.
+
+Antes de borrar carpetas, asegúrate de estar en la ruta correcta del proyecto.
+
+### Si instalaste en modo editable desde el repo
+
+```bash
+python -m pip uninstall seed-steps
+```
+
+Opcionalmente, puedes borrar el entorno virtual local del proyecto:
+
+```bash
+rm -rf .venv
+```
+
+### Si instalaste con pip normal
+
+```bash
+python -m pip uninstall seed-steps
+```
+
+### Si solo clonaste el repositorio y creaste un entorno virtual
+
+```bash
+deactivate
+rm -rf .venv
+cd ..
+rm -rf seed-steps-python
+```
+
+Notas:
+
+- Eliminar `.venv` borra solo el entorno virtual local del proyecto.
+- Borrar la carpeta del repositorio elimina tu copia local del código.
