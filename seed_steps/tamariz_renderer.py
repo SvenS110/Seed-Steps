@@ -15,6 +15,10 @@ from seed_steps.explanations import (
     PHASE_C_INTRO,
     PHASE_C_SERIALIZATION_NOTES,
     PHASE_C_STEPS,
+    PHASE_D_CKDPRIV_ENDIAN_NOTES,
+    PHASE_D_HARDENED,
+    PHASE_D_INTRO,
+    PHASE_D_STEPS,
 )
 from seed_steps.rendering import (
     COLOR_CHECKSUM,
@@ -283,3 +287,67 @@ def render_tamariz_phase_c_master(
     for note in PHASE_C_SERIALIZATION_NOTES:
         print(f"- {note}")
     print("- Resultado: nodo maestro listo para derivación HD.")
+
+
+def render_tamariz_phase_d_hd_path(
+    *,
+    path: str,
+    network: str,
+    table_lines: list[str],
+    derivation_log: list[str],
+    derived_label: str,
+    derived_xprv_display: str,
+    derived_xpub: str,
+    is_bip84_path: bool,
+    bip84_ext_prv_display: str | None,
+    bip84_ext_pub: str | None,
+    bip84_prv_prefix: str | None,
+    bip84_pub_prefix: str | None,
+) -> None:
+    _print_meetup_phase_title("Fase D — Ruta HD")
+    _print_meetup_intro_without_title(PHASE_D_INTRO, "Fase D — Ruta HD")
+    _print_meetup_text_block(PHASE_D_HARDENED)
+    print()
+    print(ts.bright_white(PHASE_D_STEPS["1_3"]))
+    print("- Idea: fijar la rama exacta del árbol HD.")
+    print(f"- Datos: ruta = {path}")
+    print("- Resultado: objetivo de derivación definido.")
+    print()
+    print(ts.bright_white(PHASE_D_STEPS["2_3"]))
+    print("- Idea: interpretar semántica por nivel.")
+    print("- Datos: hardened usa apóstrofo (') y normal no.")
+    print("- Cálculo: hardened_index = index + 2^31")
+    print("- Resultado: niveles y significado:")
+    for line in table_lines:
+        print(f"  {line}")
+    print()
+    print(ts.bright_white(PHASE_D_STEPS["3_3"]))
+    print("- Idea: derivar nodo final paso a paso con CKDpriv.")
+    print("- Cálculo: child = CKDpriv(parent, index), hardened => index + 2^31")
+    print("- Log CKDpriv:")
+    for line in derivation_log:
+        print(f"  {line}")
+    for note in PHASE_D_CKDPRIV_ENDIAN_NOTES:
+        print(f"- {note}")
+    print(f"- xprv {derived_label} = " + _colorize(derived_xprv_display, COLOR_XPRV))
+    print(f"- xpub {derived_label} = {_colorize(derived_xpub, COLOR_XPUB)}")
+    if is_bip84_path:
+        print("- Matiz: xprv/xpub usan serialización clásica BIP32.")
+        print("- Matiz: BIP84 cambia version bytes para compatibilidad de wallets.")
+        print(
+            f"- Matiz: mainnet usa zprv/zpub y testnet usa vprv/vpub (red actual: {network})."
+        )
+        print(
+            "- Matiz: clave privada/pública y chain code no cambian; cambia solo serialización/display."
+        )
+        if bip84_prv_prefix is not None and bip84_ext_prv_display is not None:
+            print(
+                f"- {bip84_prv_prefix} {derived_label} = "
+                + _colorize(bip84_ext_prv_display, COLOR_XPRV)
+            )
+        if bip84_pub_prefix is not None and bip84_ext_pub is not None:
+            print(
+                f"- {bip84_pub_prefix} {derived_label} = "
+                + _colorize(bip84_ext_pub, COLOR_XPUB)
+            )
+    print("- Resultado: nodo final listo para construir dirección.")

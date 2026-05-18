@@ -55,14 +55,11 @@ from seed_steps.tamariz_renderer import (
     render_tamariz_phase_a,
     render_tamariz_phase_b_seed,
     render_tamariz_phase_c_master,
+    render_tamariz_phase_d_hd_path,
 )
 from seed_steps.explanations import (
     MEETUP_INTRO,
     PHASE_BIG_LITTLE_ENDIAN_NOTE,
-    PHASE_D_CKDPRIV_ENDIAN_NOTES,
-    PHASE_D_INTRO,
-    PHASE_D_HARDENED,
-    PHASE_D_STEPS,
     PHASE_E_INTRO,
     PHASE_E_HASH160,
     PHASE_E_STEPS,
@@ -1506,9 +1503,7 @@ def _print_phase_hd_path(
 ) -> dict[str, object]:
     parsed = parse_bip32_path(path)
     current = derive_bip32_node_from_master(master)
-    if meetup_mode:
-        _print_meetup_phase_title("Fase D — Ruta HD")
-    else:
+    if not meetup_mode:
         print("\nFase D) Ruta HD")
     route_tokens = ["m"] + [step.token for step in parsed]
     level_labels = [
@@ -1541,64 +1536,42 @@ def _print_phase_hd_path(
         )
 
     if meetup_mode:
-        _print_meetup_intro_without_title(PHASE_D_INTRO, "Fase D — Ruta HD")
-        _print_meetup_text_block(PHASE_D_HARDENED)
-        print()
-        print(ts.bright_white(PHASE_D_STEPS["1_3"]))
-        print("- Idea: fijar la rama exacta del árbol HD.")
-        print(f"- Datos: ruta = {path}")
-        print("- Resultado: objetivo de derivación definido.")
-        print()
-        print(ts.bright_white(PHASE_D_STEPS["2_3"]))
-        print("- Idea: interpretar semántica por nivel.")
-        print("- Datos: hardened usa apóstrofo (') y normal no.")
-        print("- Cálculo: hardened_index = index + 2^31")
-        print("- Resultado: niveles y significado:")
-        for line in table_lines:
-            print(f"  {line}")
-        print()
-        print(ts.bright_white(PHASE_D_STEPS["3_3"]))
-        print("- Idea: derivar nodo final paso a paso con CKDpriv.")
-        print("- Cálculo: child = CKDpriv(parent, index), hardened => index + 2^31")
-        print("- Log CKDpriv:")
-        for line in derivation_log:
-            print(f"  {line}")
-        for note in PHASE_D_CKDPRIV_ENDIAN_NOTES:
-            print(f"- {note}")
         is_leaf_00 = (
             len(parsed) >= 2 and parsed[-2].token == "0" and parsed[-1].token == "0"
         )
         derived_label = (
             "derivado (nodo hoja /0/0, no account)" if is_leaf_00 else "derivado"
         )
-        print(
-            f"- xprv {derived_label} = "
-            + _colorize(
-                _display_sensitive(current.xprv, show_secrets=show_secrets), COLOR_XPRV
-            )
-        )
-        print(f"- xpub {derived_label} = {_colorize(current.xpub, COLOR_XPUB)}")
         is_bip84_path = bool(parsed) and parsed[0].token == "84'"
+        ext_prv: str | None = None
+        ext_pub: str | None = None
+        prv_prefix: str | None = None
+        pub_prefix: str | None = None
         if is_bip84_path:
             ext_prv, ext_pub = serialize_bip84_extended_keys(current, network)
             prv_prefix = "zprv" if network == "mainnet" else "vprv"
             pub_prefix = "zpub" if network == "mainnet" else "vpub"
-            print("- Matiz: xprv/xpub usan serialización clásica BIP32.")
-            print("- Matiz: BIP84 cambia version bytes para compatibilidad de wallets.")
-            print(
-                f"- Matiz: mainnet usa zprv/zpub y testnet usa vprv/vpub (red actual: {network})."
-            )
-            print(
-                "- Matiz: clave privada/pública y chain code no cambian; cambia solo serialización/display."
-            )
-            print(
-                f"- {prv_prefix} {derived_label} = "
-                + _colorize(
-                    _display_sensitive(ext_prv, show_secrets=show_secrets), COLOR_XPRV
-                )
-            )
-            print(f"- {pub_prefix} {derived_label} = {_colorize(ext_pub, COLOR_XPUB)}")
-        print("- Resultado: nodo final listo para construir dirección.")
+
+        render_tamariz_phase_d_hd_path(
+            path=path,
+            network=network,
+            table_lines=table_lines,
+            derivation_log=derivation_log,
+            derived_label=derived_label,
+            derived_xprv_display=_display_sensitive(
+                current.xprv, show_secrets=show_secrets
+            ),
+            derived_xpub=current.xpub,
+            is_bip84_path=is_bip84_path,
+            bip84_ext_prv_display=(
+                _display_sensitive(ext_prv, show_secrets=show_secrets)
+                if ext_prv is not None
+                else None
+            ),
+            bip84_ext_pub=ext_pub,
+            bip84_prv_prefix=prv_prefix,
+            bip84_pub_prefix=pub_prefix,
+        )
         return {"derived": current}
 
     substeps = [
