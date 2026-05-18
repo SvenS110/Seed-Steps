@@ -52,6 +52,16 @@ def _format_segmented_bits_multiline(
     return "\n".join(lines)
 
 
+def format_bits_by_byte(bits: str, *, bytes_per_line: int = 8) -> str:
+    chunks = [bits[index : index + 8] for index in range(0, len(bits), 8)]
+    line_size = max(1, bytes_per_line)
+    lines = [
+        " ".join(chunks[index : index + line_size])
+        for index in range(0, len(chunks), line_size)
+    ]
+    return "\n".join(lines)
+
+
 def _colorize_bit_prefix(bits: str, *, prefix_len: int, color: str) -> str:
     if prefix_len <= 0:
         return bits
