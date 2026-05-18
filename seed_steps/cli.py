@@ -57,11 +57,10 @@ from seed_steps.tamariz_renderer import (
     render_tamariz_phase_c_master,
     render_tamariz_phase_d_hd_path,
     render_tamariz_phase_e_address,
+    render_tamariz_phase_f_summary_header,
 )
 from seed_steps.explanations import (
     MEETUP_INTRO,
-    PHASE_BIG_LITTLE_ENDIAN_NOTE,
-    PHASE_F_SUMMARY,
 )
 from seed_steps.trace import MathTrace
 
@@ -1867,10 +1866,7 @@ def _print_phase_final_summary(
     meetup_mode: bool = False,
 ) -> None:
     if meetup_mode:
-        _print_meetup_phase_title("Fase F — Resumen final")
-        _print_meetup_text_block(PHASE_F_SUMMARY)
-        for note in PHASE_BIG_LITTLE_ENDIAN_NOTE:
-            print(f"- {note}")
+        render_tamariz_phase_f_summary_header()
     else:
         print("\nFase F) Resumen final")
     print(f"{ts.dim('━' * 88)}")

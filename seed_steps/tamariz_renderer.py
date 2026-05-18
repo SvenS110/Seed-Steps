@@ -22,6 +22,8 @@ from seed_steps.explanations import (
     PHASE_E_HASH160,
     PHASE_E_INTRO,
     PHASE_E_STEPS,
+    PHASE_BIG_LITTLE_ENDIAN_NOTE,
+    PHASE_F_SUMMARY,
 )
 from seed_steps.rendering import (
     COLOR_CHECKSUM,
@@ -395,3 +397,10 @@ def render_tamariz_phase_e_address(
     print()
     print(ts.bright_white(PHASE_E_STEPS["4_4"]))
     print(f"- Resultado: direccion = {ts.bright_white(final_address)}")
+
+
+def render_tamariz_phase_f_summary_header() -> None:
+    _print_meetup_phase_title("Fase F — Resumen final")
+    _print_meetup_text_block(PHASE_F_SUMMARY)
+    for note in PHASE_BIG_LITTLE_ENDIAN_NOTE:
+        print(f"- {note}")
