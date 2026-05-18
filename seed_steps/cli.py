@@ -41,14 +41,15 @@ from seed_steps.rendering import (
     _print_meetup_phase_title,
     _print_meetup_text_block,
     format_bits_by_byte as rendering_format_bits_by_byte,
+    format_long_hex as rendering_format_long_hex,
 )
-from seed_steps.tamariz_renderer import render_tamariz_phase_a
+from seed_steps.tamariz_renderer import (
+    render_tamariz_phase_a,
+    render_tamariz_phase_b_seed,
+)
 from seed_steps.explanations import (
     MEETUP_INTRO,
     PHASE_BIG_LITTLE_ENDIAN_NOTE,
-    PHASE_B_INTRO,
-    PHASE_B_PBKDF2,
-    PHASE_B_STEPS,
     PHASE_C_INTRO,
     PHASE_C_IL_IR_ENDIAN_NOTES,
     PHASE_C_IL_IR,
@@ -133,15 +134,9 @@ def format_bits_by_byte(bits: str, *, bytes_per_line: int = 8) -> str:
 def format_long_hex(
     value: str, *, hex_per_group: int = 8, groups_per_line: int = 4
 ) -> str:
-    chunks = [
-        value[index : index + hex_per_group]
-        for index in range(0, len(value), hex_per_group)
-    ]
-    lines = [
-        " ".join(chunks[index : index + groups_per_line])
-        for index in range(0, len(chunks), groups_per_line)
-    ]
-    return "\n".join(lines)
+    return rendering_format_long_hex(
+        value, hex_per_group=hex_per_group, groups_per_line=groups_per_line
+    )
 
 
 def format_key_material(label: str, value: str, *, color: str | None = None) -> str:
@@ -1090,9 +1085,7 @@ def _print_phase_seed_bip39(
     interactive_micro_steps: bool = False,
     meetup_mode: bool = False,
 ) -> dict[str, object]:
-    if meetup_mode:
-        _print_meetup_phase_title("Fase B — BIP39: de palabras a seed")
-    else:
+    if not meetup_mode:
         print("\nFase B) Seed BIP39")
     normalized_mnemonic = normalize_bip39_text(mnemonic)
     normalized_passphrase = normalize_bip39_text(passphrase)
@@ -1111,63 +1104,17 @@ def _print_phase_seed_bip39(
     seed_display = _display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)
 
     if meetup_mode:
-        _print_meetup_intro_without_title(
-            PHASE_B_INTRO, "Fase B — BIP39: de palabras a seed"
+        render_tamariz_phase_b_seed(
+            mnemonic=mnemonic,
+            passphrase_display=passphrase_display,
+            salt=salt,
+            mnemonic_bytes_len=len(mnemonic_bytes),
+            u_values=u_values,
+            seed_display=seed_display,
+            color_word=COLOR_WORD,
+            color_passphrase=COLOR_PASSPHRASE,
+            color_seed=COLOR_SEED,
         )
-        _print_meetup_text_block(PHASE_B_PBKDF2)
-        print()
-        print(ts.bright_white(PHASE_B_STEPS["1_6"]))
-        print(f"- Idea: fijar entrada textual del KDF.")
-        print(f"- Datos: mnemonic = {_colorize(mnemonic, COLOR_WORD)}")
-        print("- Resultado: input listo para normalizar.")
-        print()
-        print(ts.bright_white(PHASE_B_STEPS["2_6"]))
-        print("- Idea: canonizar Unicode para resultado determinista.")
-        print(f"- Datos: len(password_nfkd) = {len(mnemonic_bytes)} bytes")
-        print("- Cálculo: password = NFKD(mnemonic).encode('utf-8')")
-        print("- Resultado: password preparado para PBKDF2.")
-        print()
-        print(ts.bright_white(PHASE_B_STEPS["3_6"]))
-        print("- Idea: aplicar segundo factor opcional.")
-        print(
-            f"- Datos: passphrase = {_colorize(passphrase_display, COLOR_PASSPHRASE)}"
-        )
-        print("- Resultado: passphrase normalizada.")
-        print()
-        print(ts.bright_white(PHASE_B_STEPS["4_6"]))
-        print("- Idea: construir salt de dominio BIP39.")
-        print(f"- Datos: salt = {_colorize(salt, COLOR_PASSPHRASE)}")
-        print("- Cálculo: salt = 'mnemonic' + NFKD(passphrase)")
-        print("- Resultado: salt listo para PBKDF2.")
-        print()
-        print(ts.bright_white(PHASE_B_STEPS["5_6"]))
-        print("- Idea: endurecer derivación con 2048 iteraciones.")
-        print("- Datos: PBKDF2-HMAC-SHA512, iterations=2048, dklen=64")
-        print("- Cálculo: U_1, U_2, U_3, ..., U_2046, U_2047, U_2048; T_1 = XOR(U_i)")
-        print()
-        print("Desarrollo")
-        print(ts.bright_white("- iteracion 0001 -> U_1:"))
-        print(format_long_hex(u_values[0].hex(), groups_per_line=2))
-        print(ts.bright_white("- iteracion 0002 -> U_2:"))
-        print(format_long_hex(u_values[1].hex(), groups_per_line=2))
-        print(ts.bright_white("- iteracion 0003 -> U_3:"))
-        print(format_long_hex(u_values[2].hex(), groups_per_line=2))
-        print(ts.bright_white("- ..."))
-        print(ts.bright_white("- 2042 iteraciones intermedias omitidas"))
-        print(ts.bright_white("- ..."))
-        print(ts.bright_white("- iteracion 2046 -> U_2046:"))
-        print(format_long_hex(u_values[2045].hex(), groups_per_line=2))
-        print(ts.bright_white("- iteracion 2047 -> U_2047:"))
-        print(format_long_hex(u_values[2046].hex(), groups_per_line=2))
-        print(ts.bright_white("- iteracion 2048 -> U_2048:"))
-        print(format_long_hex(u_values[2047].hex(), groups_per_line=2))
-        print(f"- {ts.formula('T_1 = U_1 XOR U_2 XOR ... XOR U_2048')}")
-        print("- Resultado: bloque T_1 consolidado.")
-        print()
-        print(ts.bright_white(PHASE_B_STEPS["6_6"]))
-        print("- Idea: entregar la semilla final para BIP32.")
-        print(f"- Datos: seed_hex = {_colorize(seed_display, COLOR_SEED)}")
-        print("- Resultado: seed final de 64 bytes.")
         return {"seed_bytes": seed_bytes, "salt": salt}
 
     substeps = [

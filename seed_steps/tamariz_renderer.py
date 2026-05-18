@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from seed_steps import terminal_style as ts
-from seed_steps.explanations import PHASE_A_ENDIAN_NOTES, PHASE_A_INTRO, PHASE_A_NOTES
+from seed_steps.explanations import (
+    PHASE_A_ENDIAN_NOTES,
+    PHASE_A_INTRO,
+    PHASE_A_NOTES,
+    PHASE_B_INTRO,
+    PHASE_B_PBKDF2,
+    PHASE_B_STEPS,
+)
 from seed_steps.rendering import (
     COLOR_CHECKSUM,
     _colorize,
@@ -11,7 +18,9 @@ from seed_steps.rendering import (
     _colorize_checksum_by_global_position,
     _print_meetup_intro_without_title,
     _print_meetup_phase_title,
+    _print_meetup_text_block,
     format_bits_by_byte,
+    format_long_hex,
 )
 
 
@@ -151,3 +160,73 @@ def render_tamariz_phase_a(
     if not pause_between_steps:
         return "continue"
     return "continue"
+
+
+def render_tamariz_phase_b_seed(
+    *,
+    mnemonic: str,
+    passphrase_display: str,
+    salt: str,
+    mnemonic_bytes_len: int,
+    u_values: list[bytes],
+    seed_display: str,
+    color_word: str,
+    color_passphrase: str,
+    color_seed: str,
+) -> None:
+    _print_meetup_phase_title("Fase B — BIP39: de palabras a seed")
+    _print_meetup_intro_without_title(
+        PHASE_B_INTRO, "Fase B — BIP39: de palabras a seed"
+    )
+    _print_meetup_text_block(PHASE_B_PBKDF2)
+    print()
+    print(ts.bright_white(PHASE_B_STEPS["1_6"]))
+    print(f"- Idea: fijar entrada textual del KDF.")
+    print(f"- Datos: mnemonic = {_colorize(mnemonic, color_word)}")
+    print("- Resultado: input listo para normalizar.")
+    print()
+    print(ts.bright_white(PHASE_B_STEPS["2_6"]))
+    print("- Idea: canonizar Unicode para resultado determinista.")
+    print(f"- Datos: len(password_nfkd) = {mnemonic_bytes_len} bytes")
+    print("- Cálculo: password = NFKD(mnemonic).encode('utf-8')")
+    print("- Resultado: password preparado para PBKDF2.")
+    print()
+    print(ts.bright_white(PHASE_B_STEPS["3_6"]))
+    print("- Idea: aplicar segundo factor opcional.")
+    print(f"- Datos: passphrase = {_colorize(passphrase_display, color_passphrase)}")
+    print("- Resultado: passphrase normalizada.")
+    print()
+    print(ts.bright_white(PHASE_B_STEPS["4_6"]))
+    print("- Idea: construir salt de dominio BIP39.")
+    print(f"- Datos: salt = {_colorize(salt, color_passphrase)}")
+    print("- Cálculo: salt = 'mnemonic' + NFKD(passphrase)")
+    print("- Resultado: salt listo para PBKDF2.")
+    print()
+    print(ts.bright_white(PHASE_B_STEPS["5_6"]))
+    print("- Idea: endurecer derivación con 2048 iteraciones.")
+    print("- Datos: PBKDF2-HMAC-SHA512, iterations=2048, dklen=64")
+    print("- Cálculo: U_1, U_2, U_3, ..., U_2046, U_2047, U_2048; T_1 = XOR(U_i)")
+    print()
+    print("Desarrollo")
+    print(ts.bright_white("- iteracion 0001 -> U_1:"))
+    print(format_long_hex(u_values[0].hex(), groups_per_line=2))
+    print(ts.bright_white("- iteracion 0002 -> U_2:"))
+    print(format_long_hex(u_values[1].hex(), groups_per_line=2))
+    print(ts.bright_white("- iteracion 0003 -> U_3:"))
+    print(format_long_hex(u_values[2].hex(), groups_per_line=2))
+    print(ts.bright_white("- ..."))
+    print(ts.bright_white("- 2042 iteraciones intermedias omitidas"))
+    print(ts.bright_white("- ..."))
+    print(ts.bright_white("- iteracion 2046 -> U_2046:"))
+    print(format_long_hex(u_values[2045].hex(), groups_per_line=2))
+    print(ts.bright_white("- iteracion 2047 -> U_2047:"))
+    print(format_long_hex(u_values[2046].hex(), groups_per_line=2))
+    print(ts.bright_white("- iteracion 2048 -> U_2048:"))
+    print(format_long_hex(u_values[2047].hex(), groups_per_line=2))
+    print(f"- {ts.formula('T_1 = U_1 XOR U_2 XOR ... XOR U_2048')}")
+    print("- Resultado: bloque T_1 consolidado.")
+    print()
+    print(ts.bright_white(PHASE_B_STEPS["6_6"]))
+    print("- Idea: entregar la semilla final para BIP32.")
+    print(f"- Datos: seed_hex = {_colorize(seed_display, color_seed)}")
+    print("- Resultado: seed final de 64 bytes.")

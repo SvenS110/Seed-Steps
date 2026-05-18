@@ -62,6 +62,20 @@ def format_bits_by_byte(bits: str, *, bytes_per_line: int = 8) -> str:
     return "\n".join(lines)
 
 
+def format_long_hex(
+    value: str, *, hex_per_group: int = 8, groups_per_line: int = 4
+) -> str:
+    chunks = [
+        value[index : index + hex_per_group]
+        for index in range(0, len(value), hex_per_group)
+    ]
+    lines = [
+        " ".join(chunks[index : index + groups_per_line])
+        for index in range(0, len(chunks), groups_per_line)
+    ]
+    return "\n".join(lines)
+
+
 def _colorize_bit_prefix(bits: str, *, prefix_len: int, color: str) -> str:
     if prefix_len <= 0:
         return bits
