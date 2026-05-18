@@ -10,9 +10,19 @@ from seed_steps.explanations import (
     PHASE_B_INTRO,
     PHASE_B_PBKDF2,
     PHASE_B_STEPS,
+    PHASE_C_IL_IR,
+    PHASE_C_IL_IR_ENDIAN_NOTES,
+    PHASE_C_INTRO,
+    PHASE_C_SERIALIZATION_NOTES,
+    PHASE_C_STEPS,
 )
 from seed_steps.rendering import (
     COLOR_CHECKSUM,
+    COLOR_IL,
+    COLOR_IR,
+    COLOR_SEED,
+    COLOR_XPRV,
+    COLOR_XPUB,
     _colorize,
     _colorize_bit_prefix,
     _colorize_checksum_by_global_position,
@@ -230,3 +240,46 @@ def render_tamariz_phase_b_seed(
     print("- Idea: entregar la semilla final para BIP32.")
     print(f"- Datos: seed_hex = {_colorize(seed_display, color_seed)}")
     print("- Resultado: seed final de 64 bytes.")
+
+
+def render_tamariz_phase_c_master(
+    *,
+    seed_hex: str,
+    hmac_hex: str,
+    il_hex: str,
+    ir_hex: str,
+    master_xprv_display: str,
+    master_xpub: str,
+) -> None:
+    _print_meetup_phase_title("Fase C — BIP32: de seed a nodo maestro")
+    _print_meetup_intro_without_title(
+        PHASE_C_INTRO, "Fase C — BIP32: de seed a nodo maestro"
+    )
+    _print_meetup_text_block(PHASE_C_IL_IR)
+    print()
+    print(ts.bright_white(PHASE_C_STEPS["1_4"]))
+    print(f"- Idea: usar la seed como material raíz.")
+    print(f"- Datos: seed = {_colorize(seed_hex, COLOR_SEED)}")
+    print("- Resultado: entrada lista para HMAC BIP32.")
+    print()
+    print(ts.bright_white(PHASE_C_STEPS["2_4"]))
+    print("- Idea: generar I de 64 bytes con clave fija de dominio.")
+    print(f"- Datos: hmac_key = 'Bitcoin seed'")
+    print(f"- Cálculo: I = HMAC-SHA512(key='Bitcoin seed', data=seed)")
+    print(f"- Resultado: I = {_colorize(hmac_hex, COLOR_CHECKSUM)}")
+    print()
+    print(ts.bright_white(PHASE_C_STEPS["3_4"]))
+    print("- Idea: separar secreto y chain code.")
+    print(f"- Datos: I = IL || IR")
+    print(f"- Resultado: IL = {_colorize(il_hex, COLOR_IL)}")
+    print(f"- Resultado: IR = {_colorize(ir_hex, COLOR_IR)}")
+    for note in PHASE_C_IL_IR_ENDIAN_NOTES:
+        print(f"- {note}")
+    print()
+    print(ts.bright_white(PHASE_C_STEPS["4_4"]))
+    print("- Idea: construir nodo maestro serializable.")
+    print("- xprv master = " + _colorize(master_xprv_display, COLOR_XPRV))
+    print(f"- xpub master = {_colorize(master_xpub, COLOR_XPUB)}")
+    for note in PHASE_C_SERIALIZATION_NOTES:
+        print(f"- {note}")
+    print("- Resultado: nodo maestro listo para derivación HD.")

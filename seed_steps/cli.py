@@ -33,6 +33,14 @@ from seed_steps import terminal_style as ts
 from seed_steps.rendering import (
     COLOR_CHECKSUM,
     COLOR_ENTROPY,
+    COLOR_FINAL_ADDRESS,
+    COLOR_IL,
+    COLOR_IR,
+    COLOR_PASSPHRASE,
+    COLOR_SEED,
+    COLOR_WORD,
+    COLOR_XPRV,
+    COLOR_XPUB,
     _color_segmented_bits,
     _colorize,
     _colorized_11_bit_block,
@@ -46,15 +54,11 @@ from seed_steps.rendering import (
 from seed_steps.tamariz_renderer import (
     render_tamariz_phase_a,
     render_tamariz_phase_b_seed,
+    render_tamariz_phase_c_master,
 )
 from seed_steps.explanations import (
     MEETUP_INTRO,
     PHASE_BIG_LITTLE_ENDIAN_NOTE,
-    PHASE_C_INTRO,
-    PHASE_C_IL_IR_ENDIAN_NOTES,
-    PHASE_C_IL_IR,
-    PHASE_C_SERIALIZATION_NOTES,
-    PHASE_C_STEPS,
     PHASE_D_CKDPRIV_ENDIAN_NOTES,
     PHASE_D_INTRO,
     PHASE_D_HARDENED,
@@ -95,16 +99,6 @@ def _print_secrets_warning() -> None:
         "ADVERTENCIA DE SEGURIDAD: --show-secrets expone material sensible en terminal, logs e historial."
     )
     print("NO uses semillas o claves reales en este modo.")
-
-
-COLOR_WORD = "\033[38;5;208m"
-COLOR_PASSPHRASE = "\033[95m"
-COLOR_SEED = "\033[93m"
-COLOR_IL = "\033[94m"
-COLOR_IR = "\033[35m"
-COLOR_XPRV = "\033[91m"
-COLOR_XPUB = "\033[36m"
-COLOR_FINAL_ADDRESS = "\033[92m"
 
 
 def _format_bits_multiline(bits: str, *, bytes_per_line: int = 8) -> str:
@@ -1323,9 +1317,7 @@ def _print_phase_master_bip32(
     interactive_micro_steps: bool = False,
     meetup_mode: bool = False,
 ) -> dict[str, object]:
-    if meetup_mode:
-        _print_meetup_phase_title("Fase C — BIP32: de seed a nodo maestro")
-    else:
+    if not meetup_mode:
         print("\nFase C) Master BIP32")
     seed_hex = _display_sensitive(seed_bytes.hex(), show_secrets=show_secrets)
     master = derive_bip32_master_node(seed_bytes)
@@ -1358,42 +1350,16 @@ def _print_phase_master_bip32(
     )
 
     if meetup_mode:
-        _print_meetup_intro_without_title(
-            PHASE_C_INTRO, "Fase C — BIP32: de seed a nodo maestro"
+        render_tamariz_phase_c_master(
+            seed_hex=seed_hex,
+            hmac_hex=hmac_hex,
+            il_hex=il_hex,
+            ir_hex=ir_hex,
+            master_xprv_display=_display_sensitive(
+                master.xprv, show_secrets=show_secrets
+            ),
+            master_xpub=master.xpub,
         )
-        _print_meetup_text_block(PHASE_C_IL_IR)
-        print()
-        print(ts.bright_white(PHASE_C_STEPS["1_4"]))
-        print(f"- Idea: usar la seed como material raíz.")
-        print(f"- Datos: seed = {_colorize(seed_hex, COLOR_SEED)}")
-        print("- Resultado: entrada lista para HMAC BIP32.")
-        print()
-        print(ts.bright_white(PHASE_C_STEPS["2_4"]))
-        print("- Idea: generar I de 64 bytes con clave fija de dominio.")
-        print(f"- Datos: hmac_key = 'Bitcoin seed'")
-        print(f"- Cálculo: I = HMAC-SHA512(key='Bitcoin seed', data=seed)")
-        print(f"- Resultado: I = {_colorize(hmac_hex, COLOR_CHECKSUM)}")
-        print()
-        print(ts.bright_white(PHASE_C_STEPS["3_4"]))
-        print("- Idea: separar secreto y chain code.")
-        print(f"- Datos: I = IL || IR")
-        print(f"- Resultado: IL = {_colorize(il_hex, COLOR_IL)}")
-        print(f"- Resultado: IR = {_colorize(ir_hex, COLOR_IR)}")
-        for note in PHASE_C_IL_IR_ENDIAN_NOTES:
-            print(f"- {note}")
-        print()
-        print(ts.bright_white(PHASE_C_STEPS["4_4"]))
-        print("- Idea: construir nodo maestro serializable.")
-        print(
-            "- xprv master = "
-            + _colorize(
-                _display_sensitive(master.xprv, show_secrets=show_secrets), COLOR_XPRV
-            )
-        )
-        print(f"- xpub master = {_colorize(master.xpub, COLOR_XPUB)}")
-        for note in PHASE_C_SERIALIZATION_NOTES:
-            print(f"- {note}")
-        print("- Resultado: nodo maestro listo para derivación HD.")
         return {"master": master}
 
     substeps = [

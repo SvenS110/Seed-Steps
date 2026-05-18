@@ -8,6 +8,14 @@ from seed_steps import terminal_style as ts
 COLOR_RESET = "\033[0m"
 COLOR_ENTROPY = "\033[96m"
 COLOR_CHECKSUM = "\033[95m"
+COLOR_WORD = "\033[38;5;208m"
+COLOR_PASSPHRASE = "\033[95m"
+COLOR_SEED = "\033[93m"
+COLOR_IL = "\033[94m"
+COLOR_IR = "\033[35m"
+COLOR_XPRV = "\033[91m"
+COLOR_XPUB = "\033[36m"
+COLOR_FINAL_ADDRESS = "\033[92m"
 
 MEETUP_PHASE_SEPARATOR = (
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
