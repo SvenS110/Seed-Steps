@@ -251,6 +251,26 @@ abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon 
 | `--no-secrets`              | switch | Fuerza redaccion de secretos.                        |
 | `--summary-raw`             | switch | En wizard, agrega bloque final `key=value` sin ANSI. |
 
+## Arquitectura interna
+
+- `seed_steps/cli.py`:
+  Orquesta CLI, prompts, flujo interactivo, cálculo del pipeline, masking con `show_secrets` y retornos de fases.
+- `seed_steps/tamariz_renderer.py`:
+  Renderiza únicamente la narrativa Tamariz por fases. No debe calcular cripto, no debe recibir objetos de dominio BIP32/P2WPKH y no debe decidir masking.
+- `seed_steps/rendering.py`:
+  Helpers compartidos de presentación: colores semánticos, formato de bits/hex, separadores y utilidades de render terminal.
+- `seed_steps/explanations.py`:
+  Textos pedagógicos estáticos usados por los renderers.
+- `seed_steps/bip39.py`, `seed_steps/seed.py`, `seed_steps/bip32.py`, `seed_steps/bech32.py`:
+  Núcleo de dominio/cripto. Deben mantenerse independientes del render terminal.
+
+**Regla de mantenimiento:**
+
+- `cli.py` prepara datos y aplica `_display_sensitive`.
+- `tamariz_renderer.py` solo imprime datos ya preparados.
+- `rendering.py` no debe importar `cli.py`.
+- Los módulos cripto no deben depender de CLI ni render.
+
 ## Colores semanticos y `NO_COLOR`
 
 - Entropía: cian.
